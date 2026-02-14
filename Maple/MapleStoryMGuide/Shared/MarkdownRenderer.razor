@@ -1,0 +1,49 @@
+@using Markdig
+@inject IMarkdownService MarkdownService
+
+@if (string.IsNullOrEmpty(htmlContent))
+{
+    <MudSkeleton />
+    <MudSkeleton />
+    <MudSkeleton />
+}
+else
+{
+    <div class="markdown-content">
+        @((MarkupString)htmlContent)
+    </div>
+}
+
+@code {
+    [Parameter] public string FilePath { get; set; } = string.Empty;
+    [Parameter] public bool EnableTables { get; set; } = true;
+    [Parameter] public bool EnableMath { get; set; } = false;
+    
+    private string htmlContent = string.Empty;
+    private MarkdownPipeline pipeline = new MarkdownPipelineBuilder().Build();
+
+    protected override void OnInitialized()
+    {
+        var builder = new MarkdownPipelineBuilder()
+            .UseAdvancedExtensions();
+        
+        if (EnableTables) builder.UsePipeTables();
+        
+        pipeline = builder.Build();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.IsNullOrEmpty(FilePath)) return;
+
+        try 
+        {
+            var markdownContent = await MarkdownService.LoadContentAsync(FilePath);
+            htmlContent = Markdown.ToHtml(markdownContent, pipeline);
+        }
+        catch (Exception ex)
+        {
+            htmlContent = $"Error loading content: {ex.Message}";
+        }
+    }
+}

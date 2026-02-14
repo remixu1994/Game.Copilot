@@ -1,0 +1,59 @@
+@page "/"
+
+<MudText Typo="Typo.h3" Class="mb-4">欢迎来到冒险岛枫之传说攻略站</MudText>
+<MudText Typo="Typo.body1" Class="mb-8">这里汇集了最新的游戏攻略、活动分析和性价比计算工具，助你轻松冒险！</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudCard>
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">热门攻略</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.Filled.ArrowForward" Color="Color.Default" Href="equipment/ancient-upgrade" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudList T="string" Clickable="true">
+                    <MudListItem Icon="@Icons.Material.Filled.Upgrade" Href="equipment/ancient-upgrade">
+                        远古装备升品攻略
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.TrendingUp" Href="shops/moonlight-ranking">
+                        月华商店性价比排行 (最新)
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.LocalOffer" Href="packages/online-discount">
+                        在线优惠礼包分析
+                    </MudListItem>
+                </MudList>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" md="6">
+        <MudCard>
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">实用工具</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudGrid>
+                    <MudItem xs="6">
+                        <MudPaper Class="d-flex flex-column align-center justify-center py-8" Elevation="2" @onclick="@(() => NavigationManager.NavigateTo("tools/calculator"))" Style="cursor: pointer;">
+                            <MudIcon Icon="@Icons.Material.Filled.Functions" Size="Size.Large" Color="Color.Primary" />
+                            <MudText Class="mt-2">性价比计算器</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudPaper Class="d-flex flex-column align-center justify-center py-8" Elevation="2" @onclick="@(() => NavigationManager.NavigateTo("shops/private-shop"))" Style="cursor: pointer;">
+                            <MudIcon Icon="@Icons.Material.Filled.ShoppingBasket" Size="Size.Large" Color="Color.Secondary" />
+                            <MudText Class="mt-2">私人商店分析</MudText>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@inject NavigationManager NavigationManager
