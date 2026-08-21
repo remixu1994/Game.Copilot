@@ -1,0 +1,81 @@
+.economy-panel{margin-bottom:38px;padding:26px;border:1px solid #2b3039;border-radius:22px;background:#12141a}
+.upgrade-hero.unified-hero{grid-template-columns:1fr;max-width:900px}
+.economy-layout{display:grid;grid-template-columns:1.15fr .85fr;gap:24px}
+.economy-inputs{display:grid;gap:16px}
+.economy-group{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;padding:17px;border:1px solid #282c34;border-radius:15px;background:#0e1015}
+.economy-group h3{grid-column:1/-1;margin:0 0 2px;color:#d4b05e;font-size:12px}
+.economy-results{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.economy-results>div{display:flex;flex-direction:column;justify-content:center;min-height:110px;padding:17px;border:1px solid #292d35;border-radius:14px;background:#0e1015}
+.economy-results small,.economy-results span{color:#747b87;font-size:10px}
+.economy-results strong{margin:8px 0 5px;font-size:23px}
+.economy-results .meso-rate-result{border-color:rgba(213,169,76,.34);background:linear-gradient(140deg,rgba(213,169,76,.12),#0e1015)}
+.economy-results .meso-rate-result strong{color:#f1ce7e}
+.economy-results .red-crystal-result{border-color:rgba(205,74,99,.35);background:linear-gradient(140deg,rgba(205,74,99,.13),#0e1015)}
+.economy-results .red-crystal-result strong{color:#f18ba0}
+.economy-formula{margin-top:16px;padding:13px 16px;border-radius:10px;background:#191b22;color:#878d98;font-size:11px;line-height:1.6}
+.weapon-material-grid{grid-template-columns:repeat(2,1fr)}
+.unified-material-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.material-experience{display:flex;align-items:baseline;gap:9px;margin:27px 0 20px;color:#fff;font-size:38px;letter-spacing:-.05em}
+.material-reference-image{position:absolute;z-index:1;right:20px;top:18px;width:76px;height:76px;border:1px solid rgba(255,255,255,.14);border-radius:15px;object-fit:cover;object-position:76% 60%;box-shadow:0 10px 24px rgba(0,0,0,.3)}
+.material-reference-image.artifact{object-position:18% 50%}
+.material-experience small{color:#747b87;font-size:11px;font-weight:600;letter-spacing:0}
+.weapon-material-card.gold .material-experience{color:#f4cf79}
+.weapon-material-card dl{grid-template-columns:repeat(4,1fr);gap:13px}
+.material-meso-editor dd{position:relative;display:flex!important;align-items:center;max-width:126px;height:34px;border:1px solid #333842;border-radius:8px;background:#0a0c10;overflow:hidden}
+.material-meso-editor input,.material-meso-editor select{min-width:0;width:100%;height:100%;appearance:none;border:0;padding:0 42px 0 8px;outline:0;background:transparent;color:#fff;font-size:14px;font-weight:800}
+.material-meso-editor span{position:absolute;right:7px;color:#737a85;font-size:9px;pointer-events:none}
+.material-meso-editor dd:focus-within{border-color:#b78e3c}
+.steel-price-editor dd{max-width:150px}
+.steel-price-editor select{padding-right:82px}
+.armor-material-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.armor-material-card dl{grid-template-columns:repeat(3,1fr);gap:15px}
+.leather-price-editor dd{max-width:150px}
+.leather-price-editor input{padding-right:82px}
+.armor-config{margin:52px 0 24px;padding:26px;border:1px solid #262931;border-radius:22px;background:#12141a}
+.armor-config-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.armor-config .config-group{margin-top:0}
+.upgrade-select-control select{width:100%;height:44px;appearance:none;border:1px solid #2a2e37;border-radius:10px;padding:0 62px 0 12px;outline:0;background:#0d0f14;color:#fff;font-size:15px;font-weight:700;cursor:pointer}
+.upgrade-select-control select:focus{border-color:#b78e3c}
+.upgrade-select-control:after{content:'⌄';position:absolute;right:43px;top:50%;transform:translateY(-55%);color:#7a808b;font-size:11px;pointer-events:none}
+.powder-sources{margin-top:52px}
+.powder-source-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.powder-source-card{padding:22px;border:1px solid #292d35;border-radius:18px;background:#12141a}
+.source-product{display:grid;grid-template-columns:96px 1fr;align-items:center;gap:16px;margin-bottom:20px}
+.source-product>img{width:96px;height:108px;border-radius:13px;object-fit:cover;object-position:center;box-shadow:0 10px 25px rgba(0,0,0,.24)}
+.source-product>img.detail-item-image{object-position:top left}
+.source-heading{display:flex;align-items:center;justify-content:space-between}
+.source-heading>span{border-radius:999px;padding:6px 10px;background:#273346;color:#99bde8;font-size:10px;font-weight:800}
+.source-heading>small{color:#6d737f;font-size:9px}
+.powder-source-card h3{margin:15px 0 0;font-size:17px;line-height:1.45}
+.source-total{display:flex;align-items:baseline;gap:6px;padding:16px;border-radius:12px;background:linear-gradient(110deg,rgba(213,169,76,.14),rgba(213,169,76,.03))}
+.source-total small{margin-right:auto;color:#858b96;font-size:10px}
+.source-total strong{color:#f1ce7e;font-size:26px}
+.source-total em{color:#8b8270;font-size:10px;font-style:normal}
+.powder-source-card dl{display:grid;grid-template-columns:repeat(2,1fr);gap:17px;margin:20px 0 0}
+.powder-source-card dl div{display:grid;gap:5px}
+.powder-source-card dt{color:#727884;font-size:10px}
+.powder-source-card dd{margin:0;font-size:15px;font-weight:800}
+.armor-powder-card{max-width:760px}
+.armor-powder-card .source-product{grid-template-columns:160px 1fr}
+.armor-powder-card .source-product>img{width:160px;height:160px;object-position:top left}
+.armor-powder-card dl{grid-template-columns:repeat(5,1fr)}
+.source-price-field dd{position:relative;display:flex!important;align-items:center;max-width:150px;height:34px;border:1px solid #323741;border-radius:8px;background:#090b0f;overflow:hidden}
+.source-price-field input{min-width:0;width:100%;height:100%;border:0;padding:0 66px 0 9px;outline:0;background:transparent;color:#fff;font-size:14px;font-weight:800}
+.source-price-field dd>span{position:absolute;right:8px;color:#777e89;font-size:9px;font-weight:400}
+.source-price-field dd:focus-within{border-color:#b78e3c}
+.source-comparison{display:flex;align-items:center;gap:14px;margin-top:12px;padding:16px 18px;border:1px solid rgba(213,169,76,.18);border-radius:14px;background:rgba(213,169,76,.055)}
+.source-comparison strong{color:#e4c16f;font-size:12px;white-space:nowrap}
+.source-comparison p{margin:0;color:#c7cad0;font-size:12px}
+.source-comparison small{margin-left:auto;color:#747a86;font-size:10px;text-align:right}
+.armor-source{display:grid;grid-template-columns:64px 1fr auto;align-items:center;gap:18px;margin-bottom:16px;padding:24px;border:1px solid rgba(93,150,205,.25);border-radius:20px;background:linear-gradient(110deg,rgba(73,125,174,.13),#111319 55%)}
+.armor-source-icon{display:grid;place-items:center;width:58px;height:58px;border-radius:17px;background:#25425e;color:#a8d3f7;font-size:13px;font-weight:900}
+.armor-source-image{width:64px;height:72px;border-radius:13px;object-fit:cover;box-shadow:0 9px 22px rgba(0,0,0,.24)}
+.armor-source h2{margin:0 0 7px;font-size:26px}
+.armor-source p:last-child{margin:0;color:#878e9a;font-size:12px}
+.armor-source-price{display:grid;gap:6px;text-align:right}
+.armor-source-price small{display:block;color:#727986;font-size:10px}
+.armor-source-price>span{display:flex;align-items:center;gap:7px;color:#7d8995;font-size:10px}
+.armor-source-price input{width:110px;height:42px;border:1px solid #32404d;border-radius:10px;padding:0 10px;outline:0;background:#0b1117;color:#9dccf2;text-align:right;font-size:20px;font-weight:900}
+.armor-source-price input:focus{border-color:#659cc9}
+@media(max-width:820px){.economy-layout{grid-template-columns:1fr}.weapon-material-grid,.unified-material-grid,.armor-material-grid,.powder-source-grid,.armor-config-grid{grid-template-columns:1fr}.source-comparison{align-items:flex-start;flex-direction:column}.source-comparison small{margin-left:0;text-align:left}}
+@media(max-width:520px){.economy-panel,.armor-config{padding:18px}.economy-group,.economy-results{grid-template-columns:1fr}.economy-results>div{min-height:96px}.weapon-material-card dl,.armor-material-card dl{grid-template-columns:1fr 1fr;gap:14px}.source-product,.armor-powder-card .source-product{grid-template-columns:78px 1fr}.source-product>img,.armor-powder-card .source-product>img{width:78px;height:92px}.armor-powder-card dl{grid-template-columns:1fr 1fr}.armor-source{grid-template-columns:64px 1fr;padding:18px}.armor-source-price{grid-column:2;text-align:left}.armor-source-price>span{justify-content:flex-start}}
