@@ -1,4 +1,5 @@
 import './home.css';
+import './perfect-home.css';
 
 const tools = [
   {
@@ -27,6 +28,15 @@ const tools = [
     description: '录入角色面板与技能数据，估算爆发、常态伤害和技能输出贡献。',
     action: '打开模拟器',
     tone: 'red',
+  },
+  {
+    href: '/cores',
+    index: '04',
+    eyebrow: 'PERFECT V MATRIX',
+    title: '完美核心计算器',
+    description: '录入自己已有的三合一核心，自动找出能够组成 4核6技的毕业组合。',
+    action: '开始组合',
+    tone: 'cyan',
   },
 ];
 
