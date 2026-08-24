@@ -1,187 +1,785 @@
-import { useEffect, useMemo, useState } from 'react';
-import './perfect-core.css';
-import './perfect-core-adjustments.css';
+import { useEffect, useMemo, useState } from "react";
+import {
+  calculatePerfectCores,
+  getCoreKey,
+  recommendNextCores,
+} from "./perfectCoreCalculator";
+import { loadProfessions, loadSkills } from "./perfectCoreDb";
+import { professionCategories } from "./perfectCoreSeed";
+import {
+  referenceLayoutByProfessionId,
+  supportedReferenceLayouts,
+} from "./perfectCoreRecommendations";
+import type {
+  BoostCore,
+  CoreMode,
+  Profession,
+  Skill,
+  PerfectCoreResult,
+} from "./perfectCoreTypes";
+import "./perfect-core.css";
 
-type SkillId = 'cleave' | 'order' | 'bloom' | 'territory' | 'shard' | 'creation';
-type OwnedCore = { id: string; skills: [SkillId, SkillId, SkillId] };
-
-const skills: Array<{ id: SkillId; name: string; icon: string }> = [
-  { id: 'cleave', name: '斩决', icon: '/core-icons/cleave.png' },
-  { id: 'order', name: '御剑追击', icon: '/core-icons/order.png' },
-  { id: 'bloom', name: '盛放之剑', icon: '/core-icons/bloom.png' },
-  { id: 'territory', name: '剑域', icon: '/core-icons/territory.png' },
-  { id: 'shard', name: '夏德', icon: '/core-icons/shard.png' },
-  { id: 'creation', name: '缔造', icon: '/core-icons/creation.png' },
-];
-
-const skillMap = Object.fromEntries(skills.map((skill) => [skill.id, skill])) as Record<SkillId, (typeof skills)[number]>;
-const targetPerSkill = 2;
-const targetCoreCount = 4;
-const storageKey = 'maplelab-perfect-cores';
-
-const exampleCores: OwnedCore[] = [
-  { id: 'example-1', skills: ['bloom', 'territory', 'order'] },
-  { id: 'example-2', skills: ['bloom', 'territory', 'cleave'] },
-  { id: 'example-3', skills: ['cleave', 'order', 'shard'] },
-  { id: 'example-4', skills: ['cleave', 'territory', 'order'] },
-  { id: 'example-5', skills: ['shard', 'creation', 'cleave'] },
-  { id: 'example-6', skills: ['shard', 'creation', 'territory'] },
-  { id: 'example-7', skills: ['creation', 'order', 'bloom'] },
-  { id: 'example-8', skills: ['order', 'cleave', 'creation'] },
-];
-
-function combinations<T>(items: T[], count: number): T[][] {
-  if (count === 0) return [[]];
-  if (items.length < count) return [];
-  const result: T[][] = [];
-  items.forEach((item, index) => {
-    combinations(items.slice(index + 1), count - 1).forEach((tail) => result.push([item, ...tail]));
-  });
-  return result;
+interface OwnedCore extends BoostCore {
+  level: number;
 }
-
-function scoreCoreSet(cores: OwnedCore[]) {
-  const counts = Object.fromEntries(skills.map(({ id }) => [id, 0])) as Record<SkillId, number>;
-  cores.forEach((core) => core.skills.forEach((skill) => { counts[skill] += 1; }));
-  const covered = skills.reduce((total, skill) => total + Math.min(counts[skill.id], targetPerSkill), 0);
-  return { counts, covered, progress: Math.round((covered / (skills.length * targetPerSkill)) * 100) };
+interface ScoredResult extends PerfectCoreResult {
+  matchedCount: number;
+  replaceCount: number;
 }
-
-function solveOwnedCores(ownedCores: OwnedCore[]) {
-  const eligibleSets: OwnedCore[][] = [];
-  for (let size = Math.min(targetCoreCount, ownedCores.length); size >= 1; size -= 1) {
-    combinations(ownedCores, size).forEach((set) => {
-      const uniqueMains = new Set(set.map((core) => core.skills[0]));
-      if (uniqueMains.size === set.length) eligibleSets.push(set);
-    });
-  }
-
-  let best = eligibleSets[0] ?? [];
-  let bestScore = scoreCoreSet(best);
-  eligibleSets.forEach((set) => {
-    const score = scoreCoreSet(set);
-    if (score.covered > bestScore.covered || (score.covered === bestScore.covered && set.length > best.length)) {
-      best = set;
-      bestScore = score;
-    }
-  });
-
-  const solution = eligibleSets.find((set) => {
-    if (set.length !== targetCoreCount) return false;
-    const { counts } = scoreCoreSet(set);
-    return skills.every(({ id }) => counts[id] === targetPerSkill);
-  });
-
-  return { solution, best, ...bestScore };
+function SkillBadge({ skill, label }: { skill?: Skill; label?: string }) {
+  return (
+    <span className="core-skill">
+      <span className="skill-avatar">
+        {skill?.iconUrl ? (
+          <img src={skill.iconUrl} alt="" />
+        ) : (
+          skill?.name.slice(0, 1)
+        )}
+      </span>
+      <span>
+        {label && <small>{label}</small>}
+        {skill?.name ?? "未知技能"}
+      </span>
+    </span>
+  );
 }
-
-function SkillIcon({ id, size = 'normal' }: { id: SkillId; size?: 'normal' | 'small' }) {
-  const skill = skillMap[id];
-  return <img className={`core-skill-icon ${size}`} src={skill.icon} alt={skill.name} title={skill.name} />;
-}
-
-function CoreEditor({ initial, onCancel, onSave }: { initial?: OwnedCore; onCancel: () => void; onSave: (skills: [SkillId, SkillId, SkillId]) => void }) {
-  const [selected, setSelected] = useState<SkillId[]>(initial?.skills ?? []);
-  const chooseSkill = (skill: SkillId) => {
-    setSelected((current) => current.includes(skill) ? current.filter((item) => item !== skill) : current.length < 3 ? [...current, skill] : current);
-  };
-
-  return <div className="core-modal-backdrop" onMouseDown={onCancel}>
-    <section className="core-modal" role="dialog" aria-modal="true" aria-labelledby="core-editor-title" onMouseDown={(event) => event.stopPropagation()}>
-      <div className="core-modal-head">
-        <div><small>添加已有核心</small><h2 id="core-editor-title">依次选择核心的三个技能</h2></div>
-        <button type="button" onClick={onCancel} aria-label="关闭">×</button>
-      </div>
-      <p className="core-modal-tip">第一个是主技能，决定核心名称；三个技能不能重复。</p>
-      <div className="core-editor-slots">
-        {[0, 1, 2].map((index) => <div className={selected[index] ? 'filled' : ''} key={index}>
-          <span>{index === 0 ? '主' : index}</span>
-          {selected[index] ? <><SkillIcon id={selected[index]} /><b>{skillMap[selected[index]].name}</b></> : <em>请选择</em>}
-        </div>)}
-      </div>
-      <div className="core-editor-skills">
-        {skills.map((skill) => <button className={selected.includes(skill.id) ? 'selected' : ''} type="button" onClick={() => chooseSkill(skill.id)} key={skill.id}>
-          <SkillIcon id={skill.id} /><span>{skill.name}</span><i>{selected.indexOf(skill.id) === 0 ? '主' : selected.includes(skill.id) ? selected.indexOf(skill.id) : ''}</i>
-        </button>)}
-      </div>
-      <div className="core-modal-actions">
-        <button type="button" onClick={onCancel}>取消</button>
-        <button type="button" className="primary" disabled={selected.length !== 3} onClick={() => onSave(selected as [SkillId, SkillId, SkillId])}>保存核心</button>
-      </div>
-    </section>
-  </div>;
-}
+const modeInfo: Record<
+  CoreMode,
+  { title: string; detail: string; count: number }
+> = {
+  "4CORE_6": { title: "4核6", detail: "完美方案 · 6 个技能 × 2 次", count: 6 },
+  "3CORE_4_5": {
+    title: "3核4.5",
+    detail: "完美方案 · 4 个双强化 + 1 个半强化",
+    count: 5,
+  },
+  "4CORE_4": { title: "4核4", detail: "过渡方案 · 4 个技能 × 3 次", count: 4 },
+};
 
 export default function PerfectCorePage() {
-  const [ownedCores, setOwnedCores] = useState<OwnedCore[]>(() => {
-    try {
-      const stored = localStorage.getItem(storageKey);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
+  const [professions, setProfessions] = useState<Profession[]>([]);
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [professionId, setProfessionId] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("全部");
+  const [mode, setMode] = useState<CoreMode>("4CORE_6");
+  const [selected, setSelected] = useState<string[]>([]);
+  const [halfSkillId, setHalfSkillId] = useState("");
+  const [results, setResults] = useState<PerfectCoreResult[]>([]);
+  const [ownedCores, setOwnedCores] = useState<OwnedCore[]>([]);
+  const [ownedDraft, setOwnedDraft] = useState<OwnedCore>({
+    mainSkillId: "",
+    subSkillIds: ["", ""],
+    level: 1,
   });
-  const [editingId, setEditingId] = useState<string | 'new' | null>(null);
-  const result = useMemo(() => solveOwnedCores(ownedCores), [ownedCores]);
-  const editingCore = editingId && editingId !== 'new' ? ownedCores.find((core) => core.id === editingId) : undefined;
-
-  useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(ownedCores)); }, [ownedCores]);
-
-  const saveCore = (coreSkills: [SkillId, SkillId, SkillId]) => {
-    if (editingId && editingId !== 'new') {
-      setOwnedCores((current) => current.map((core) => core.id === editingId ? { ...core, skills: coreSkills } : core));
-    } else {
-      setOwnedCores((current) => [...current, { id: crypto.randomUUID(), skills: coreSkills }]);
-    }
-    setEditingId(null);
+  const [ownedFilter, setOwnedFilter] = useState<
+    "all" | "matched" | "remaining"
+  >("all");
+  const [message, setMessage] = useState("选择职业和技能后开始计算");
+  const [search, setSearch] = useState("");
+  const [skillSearch, setSkillSearch] = useState("");
+  useEffect(() => {
+    loadProfessions().then((items) => {
+      setProfessions(items);
+      setProfessionId(
+        items.find((item) => item.id === "night-lord")?.id ??
+          items[0]?.id ??
+          "",
+      );
+    });
+  }, []);
+  useEffect(() => {
+    if (professionId)
+      loadSkills(professionId).then((items) => {
+        setSkills(items);
+        const recommended = items.filter((skill) => skill.recommended);
+        if (recommended.length === 6) {
+          setMode("4CORE_6");
+          setSelected(recommended.map((skill) => skill.id));
+        }
+      });
+  }, [professionId]);
+  useEffect(() => {
+    setSelected([]);
+    setHalfSkillId("");
+    setResults([]);
+    setOwnedCores([]);
+    setMessage("选择目标技能后开始计算");
+  }, [professionId]);
+  useEffect(() => {
+    setResults([]);
+    if (mode !== "3CORE_4_5") setHalfSkillId("");
+  }, [mode]);
+  const visibleSkills = useMemo(
+    () => skills.filter((skill) => skill.name.includes(skillSearch)),
+    [skills, skillSearch],
+  );
+  const referenceLayout = referenceLayoutByProfessionId[professionId];
+  const skillMap = useMemo(
+    () => new Map(skills.map((skill) => [skill.id, skill])),
+    [skills],
+  );
+  const availableCategories = professionCategories.filter((category) =>
+    professions.some((profession) => profession.category === category),
+  );
+  const visibleProfessions = professions.filter(
+    (profession) =>
+      (categoryFilter === "全部" || profession.category === categoryFilter) &&
+      (profession.name.includes(search) ||
+        profession.category.includes(search)),
+  );
+  const scoredResults = useMemo<ScoredResult[]>(
+    () =>
+      results
+        .map((result) => {
+          const matchedCount = ownedCores.filter((owned) =>
+            result.cores.some((core) => getCoreKey(core) === getCoreKey(owned)),
+          ).length;
+          return {
+            ...result,
+            matchedCount,
+            replaceCount: result.cores.length - matchedCount,
+          };
+        })
+        .sort(
+          (a, b) =>
+            a.replaceCount - b.replaceCount || b.matchedCount - a.matchedCount,
+        ),
+    [results, ownedCores],
+  );
+  const filteredResults = scoredResults.filter((result) =>
+    ownedFilter === "matched"
+      ? result.matchedCount > 0
+      : ownedFilter === "remaining"
+        ? result.replaceCount > 0
+        : true,
+  );
+  const nextRecommendations = useMemo(
+    () => recommendNextCores(results, ownedCores),
+    [results, ownedCores],
+  );
+  const toggleSkill = (id: string) => {
+    setSelected((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id],
+    );
+    setResults([]);
   };
+  const changeMode = (nextMode: CoreMode) => {
+    const targetCount = modeInfo[nextMode].count;
+    const recommended = skills
+      .filter((skill) => skill.recommended)
+      .map((skill) => skill.id);
+    setMode(nextMode);
+    setSelected((current) =>
+      recommended.length >= targetCount
+        ? recommended.slice(0, targetCount)
+        : current.slice(0, targetCount),
+    );
+    setMessage(
+      nextMode === "4CORE_4"
+        ? "4核4是过渡方案，需要后续转换为完美核心"
+        : "选择目标技能后开始计算",
+    );
+  };
+  const calculate = () => {
+    const output = calculatePerfectCores({
+      mode,
+      selectedSkillIds: selected,
+      halfSkillId: mode === "3CORE_4_5" ? halfSkillId : undefined,
+    });
+    setResults(output.results);
+    setMessage(
+      output.error ??
+        (output.results.length
+          ? `找到 ${output.results.length} 种${mode === "4CORE_4" ? "过渡" : "可用"}方案`
+          : "没有满足条件的核心组合"),
+    );
+  };
+  const addOwnedCore = () => {
+    const [main, sub1, sub2] = [
+      ownedDraft.mainSkillId,
+      ...ownedDraft.subSkillIds,
+    ];
+    if (!main || !sub1 || !sub2)
+      return setMessage("请完整选择已有核心的 3 个技能");
+    if (new Set([main, sub1, sub2]).size !== 3)
+      return setMessage("一个核心内不能重复技能");
+    setOwnedCores((current) => [
+      ...current,
+      { ...ownedDraft, subSkillIds: [sub1, sub2].sort() as [string, string] },
+    ]);
+    setOwnedDraft({ mainSkillId: "", subSkillIds: ["", ""], level: 1 });
+    setOwnedFilter("all");
+  };
+  return (
+    <main className="perfect-shell">
+      <header className="perfect-header">
+        <a className="perfect-brand" href="/">
+          Maple<span>Lab</span>
+        </a>
+        <div>
+          <span className="eyebrow">UTILITY / 05</span>
+          <h1>完美核心</h1>
+          <p>选择推荐技能，生成目标组合，再用已有核心筛选最省替换方案。</p>
+        </div>
+        <span aria-hidden="true" />
+      </header>
+      <div className="perfect-layout">
+        <aside className="perfect-sidebar">
+          <div className="side-heading">
+            <span>01</span>
+            <h2>选择职业</h2>
+          </div>
+          <input
+            className="line-input"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="搜索职业或分类"
+          />
+          <div className="category-filter">
+            <button
+              className={categoryFilter === "全部" ? "active" : ""}
+              onClick={() => setCategoryFilter("全部")}
+            >
+              全部 <small>{professions.length}</small>
+            </button>
+            {availableCategories.map((category) => (
+              <button
+                key={category}
+                className={categoryFilter === category ? "active" : ""}
+                onClick={() => setCategoryFilter(category)}
+              >
+                {category}
+                <small>
+                  {
+                    professions.filter(
+                      (profession) => profession.category === category,
+                    ).length
+                  }
+                </small>
+              </button>
+            ))}
+          </div>
+          <div className="profession-count">
+            {categoryFilter === "全部" ? "全部职业" : categoryFilter}
+            <span>{visibleProfessions.length} 个</span>
+          </div>
+          <div className="profession-grid">
+            {visibleProfessions.map((profession) => (
+              <button
+                key={profession.id}
+                className={
+                  profession.id === professionId
+                    ? "profession-card active"
+                    : "profession-card"
+                }
+                onClick={() => setProfessionId(profession.id)}
+              >
+                <span className="profession-avatar">
+                  {profession.iconUrl ? (
+                    <img src={profession.iconUrl} alt="" />
+                  ) : (
+                    profession.name.slice(0, 1)
+                  )}
+                </span>
+                <strong>{profession.name}</strong>
+                <small>{profession.category}</small>
+              </button>
+            ))}
+            {visibleProfessions.length === 0 && (
+              <p className="profession-empty">没有匹配的职业</p>
+            )}
+          </div>
+        </aside>
+        <section className="perfect-main">
+          <div className="workspace-head">
+            <div>
+              <span className="eyebrow">02 / TARGET SKILLS</span>
+              <h2>
+                {professions.find((item) => item.id === professionId)?.name ??
+                  "选择职业"}
+              </h2>
+              {referenceLayout && (
+                <p className="reference-layout">
+                  长图参考 <b>{referenceLayout}</b>
+                  {!supportedReferenceLayouts.has(referenceLayout) && (
+                    <span>当前版本暂未开放该计算模式</span>
+                  )}
+                </p>
+              )}
+            </div>
+            <span className="selection-count">
+              已选择 <b>{selected.length}</b> / {modeInfo[mode].count}
+            </span>
+          </div>
+          <div className="mode-groups">
+            <section className="mode-group">
+              <div className="mode-group-title">
+                <strong>完美方案</strong>
+                <span>最终养成目标</span>
+              </div>
+              <div className="mode-row">
+                {(["4CORE_6", "3CORE_4_5"] as CoreMode[]).map((item) => (
+                  <button
+                    key={item}
+                    className={mode === item ? "mode active" : "mode"}
+                    onClick={() => changeMode(item)}
+                  >
+                    <strong>{modeInfo[item].title}</strong>
+                    <span>{modeInfo[item].detail}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+            <section className="mode-group transition">
+              <div className="mode-group-title">
+                <strong>过渡方案</strong>
+                <span>成型前临时使用</span>
+              </div>
+              <button
+                className={
+                  mode === "4CORE_4"
+                    ? "mode transition-mode active"
+                    : "mode transition-mode"
+                }
+                onClick={() => changeMode("4CORE_4")}
+              >
+                <span className="mode-copy">
+                  <strong>{modeInfo["4CORE_4"].title}</strong>
+                  <span>{modeInfo["4CORE_4"].detail}</span>
+                </span>
+                <b>非完美</b>
+              </button>
+            </section>
+          </div>
+          {mode === "4CORE_4" && (
+            <div className="transition-note">
+              <strong>4核4不是完美核心</strong>
+              <span>
+                4 个技能各出现 3 次，用于前期过渡；有效强化按 50
+                级封顶，后续建议转为 3核4.5 或 4核6。
+              </span>
+            </div>
+          )}
+          <div className="skill-toolbar">
+            <span>
+              全部技能 <small>红点为推荐技能</small>
+            </span>
+            <input
+              value={skillSearch}
+              onChange={(event) => setSkillSearch(event.target.value)}
+              placeholder="搜索技能"
+            />
+            <button
+              onClick={() =>
+                setSelected(visibleSkills.map((skill) => skill.id))
+              }
+            >
+              全部选择
+            </button>
+            <button onClick={() => setSelected([])}>清空</button>
+          </div>
+          <div className="skill-explain">
+            不知道选哪些技能？优先选择管理员预置的推荐技能；也可以参考领主伤害统计中占比最高的技能。
+          </div>
+          {visibleSkills.length > 0 ? (
+            <div className="skill-grid">
+              {visibleSkills.map((skill) => (
+                <button
+                  key={skill.id}
+                  className={`${selected.includes(skill.id) ? "skill-tile selected" : "skill-tile"} ${skill.recommended ? "recommended" : ""}`}
+                  onClick={() => toggleSkill(skill.id)}
+                >
+                  <span className="skill-avatar">
+                    {skill.iconUrl ? (
+                      <img src={skill.iconUrl} alt="" />
+                    ) : (
+                      skill.name.slice(0, 1)
+                    )}
+                  </span>
+                  <span>
+                    <strong>
+                      {skill.name}
+                      {skill.recommended && <i>推荐</i>}
+                    </strong>
+                    <small>
+                      {selected.includes(skill.id) ? "已加入目标" : "点击选择"}
+                    </small>
+                  </span>
+                  <b>{selected.includes(skill.id) ? "✓" : "+"}</b>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="skill-empty">
+              <strong>该职业的强化技能资料待补充</strong>
+              <span>可前往数据维护页面录入技能、图标和推荐状态。</span>
+            </div>
+          )}
+          {mode === "3CORE_4_5" && (
+            <div className="half-row">
+              <div>
+                <span className="eyebrow">HALF BOOST</span>
+                <strong>选择半强化技能</strong>
+                <small>该技能在组合中只出现 1 次，获得 25 级强化。</small>
+              </div>
+              <select
+                value={halfSkillId}
+                onChange={(event) => setHalfSkillId(event.target.value)}
+              >
+                <option value="">请选择技能</option>
+                {selected.map((id) => (
+                  <option key={id} value={id}>
+                    {skillMap.get(id)?.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="calculate-bar">
+            <span className={message.startsWith("找到") ? "success" : ""}>
+              {message}
+            </span>
+            <button className="primary-action" onClick={calculate}>
+              {mode === "4CORE_4" ? "生成过渡核心" : "生成完美核心"}{" "}
+              <span>→</span>
+            </button>
+          </div>
+          {results.length > 0 && (
+            <>
+              <OwnedCorePanel
+                skills={skills}
+                ownedCores={ownedCores}
+                draft={ownedDraft}
+                setDraft={setOwnedDraft}
+                onAdd={addOwnedCore}
+                onRemove={(index) =>
+                  setOwnedCores((current) =>
+                    current.filter((_, itemIndex) => itemIndex !== index),
+                  )
+                }
+              />
+              <NextCorePanel
+                recommendations={nextRecommendations}
+                skills={skills}
+                onPick={(core) => setOwnedDraft({ ...core, level: 1 })}
+              />
+              <ResultList
+                results={filteredResults}
+                total={results.length}
+                filter={ownedFilter}
+                setFilter={setOwnedFilter}
+                skillMap={skillMap}
+                ownedCount={ownedCores.length}
+                ownedCores={ownedCores}
+                mode={mode}
+              />
+            </>
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}
 
-  const missing = skills.map((skill) => ({ ...skill, count: Math.max(0, targetPerSkill - result.counts[skill.id]) })).filter((skill) => skill.count > 0);
-
-  return <main className="perfect-core-shell">
-    <header className="core-topbar">
-      <a className="core-brand" href="/">Maple<span>Lab</span></a>
-      <div><small>御剑骑士</small><strong>完美核心计算器</strong></div>
-      <a href="/">返回工具箱</a>
-    </header>
-
-    <section className="core-intro">
-      <div><span>V MATRIX</span><h1>把已有核心，<br />拼成真正的<span>完美组合。</span></h1></div>
-      <p>录入你背包里的三合一核心，工具会自动检查主技能冲突，并从中找出能毕业的组合。</p>
-    </section>
-
-    <section className="core-panel target-panel">
-      <div className="core-section-title"><span>1</span><div><h2>完美核心</h2><p>当前按御剑骑士常用六技计算</p></div><a href="#core-rules">核心规则</a></div>
-      <div className="core-plan-tabs" aria-label="核心方案"><button disabled>3核4.5</button><button className="active">4核6</button><button disabled>5核7.5</button><button disabled>6核9</button><button disabled>7核10.5</button></div>
-      <div className="core-other-filter">其他⌄</div>
-      <div className="target-skills">{skills.map((skill) => <div key={skill.id}><SkillIcon id={skill.id} /><span>{skill.name}</span></div>)}</div>
-    </section>
-
-    <section className="core-panel owned-panel">
-      <div className="core-section-title"><span>2</span><div><h2>我的核心</h2><p>点击加号，把自己已有的三合一核心逐颗录入</p></div><div className="owned-actions"><button onClick={() => setOwnedCores(exampleCores)}>载入示例</button><button className="danger" onClick={() => setOwnedCores([])} disabled={!ownedCores.length}>清空</button></div></div>
-      <div className="owned-core-list">
-        {ownedCores.map((core) => <article className="owned-core-card" key={core.id}>
-          <button className="remove-core" type="button" aria-label="删除核心" onClick={() => setOwnedCores((current) => current.filter((item) => item.id !== core.id))}>×</button>
-          <button className="core-stack" type="button" onClick={() => setEditingId(core.id)} aria-label={`编辑${skillMap[core.skills[0]].name}核心`}>
-            {core.skills.map((skill, index) => <span className={index === 0 ? 'main' : ''} key={skill}><SkillIcon id={skill} /></span>)}
+function OwnedCorePanel({
+  skills,
+  ownedCores,
+  draft,
+  setDraft,
+  onAdd,
+  onRemove,
+}: {
+  skills: Skill[];
+  ownedCores: OwnedCore[];
+  draft: OwnedCore;
+  setDraft: (value: OwnedCore) => void;
+  onAdd: () => void;
+  onRemove: (index: number) => void;
+}) {
+  const optionList = (
+    <>
+      <option value="">选择技能</option>
+      {skills.map((skill) => (
+        <option key={skill.id} value={skill.id}>
+          {skill.name}
+        </option>
+      ))}
+    </>
+  );
+  return (
+    <section className="owned-section">
+      <div className="results-heading">
+        <div>
+          <span className="eyebrow">03 / OWNED CORES</span>
+          <h2>
+            我已有的核心 <em>{ownedCores.length}</em>
+          </h2>
+        </div>
+        <span>录入后按可保留核心数量排序</span>
+      </div>
+      {ownedCores.map((core, index) => (
+        <div className="owned-core-row" key={`${getCoreKey(core)}-${index}`}>
+          <span className="owned-index">{index + 1}</span>
+          <SkillBadge
+            skill={skills.find((skill) => skill.id === core.mainSkillId)}
+            label="主"
+          />
+          <SkillBadge
+            skill={skills.find((skill) => skill.id === core.subSkillIds[0])}
+          />
+          <SkillBadge
+            skill={skills.find((skill) => skill.id === core.subSkillIds[1])}
+          />
+          <span className="owned-level">Lv. {core.level}</span>
+          <button className="remove-owned" onClick={() => onRemove(index)}>
+            ×
           </button>
-        </article>)}
-        <button className="add-core" type="button" onClick={() => setEditingId('new')}><span>＋</span><small>添加核心</small></button>
+        </div>
+      ))}
+      <div className="owned-core-editor">
+        <span className="owned-index">＋</span>
+        <select
+          value={draft.mainSkillId}
+          onChange={(event) =>
+            setDraft({ ...draft, mainSkillId: event.target.value })
+          }
+        >
+          {optionList}
+        </select>
+        <select
+          value={draft.subSkillIds[0]}
+          onChange={(event) =>
+            setDraft({
+              ...draft,
+              subSkillIds: [event.target.value, draft.subSkillIds[1]],
+            })
+          }
+        >
+          {optionList}
+        </select>
+        <select
+          value={draft.subSkillIds[1]}
+          onChange={(event) =>
+            setDraft({
+              ...draft,
+              subSkillIds: [draft.subSkillIds[0], event.target.value],
+            })
+          }
+        >
+          {optionList}
+        </select>
+        <label className="owned-level-input">
+          Lv.
+          <input
+            type="number"
+            min="1"
+            max="25"
+            value={draft.level}
+            onChange={(event) =>
+              setDraft({
+                ...draft,
+                level: Math.max(1, Math.min(25, Number(event.target.value))),
+              })
+            }
+          />
+        </label>
+        <button className="add-owned" onClick={onAdd}>
+          添加
+        </button>
       </div>
-      {ownedCores.length > 0 && <p className="owned-summary">已录入 {ownedCores.length} 颗核心 · 点击任意核心可修改</p>}
     </section>
+  );
+}
 
-    <section className="core-panel result-core-panel">
-      <div className="core-section-title"><span>3</span><div><h2>计算结果</h2><p>实时检查是否已经能够组成完美核心</p></div><i className={result.solution ? 'done' : ''}>{result.solution ? '可毕业' : '计算中'}</i></div>
-      <div className="core-result-overview">
-        <div className="progress-ring" style={{ '--progress': `${result.solution ? 360 : result.progress * 3.6}deg` } as React.CSSProperties}><div><strong>{result.solution ? 100 : result.progress}%</strong><small>毕业进度</small></div></div>
-        <div className="result-message"><span>{result.solution ? '组合完成' : ownedCores.length ? '继续录入核心' : '等待你的核心'}</span><h3>{result.solution ? '已毕业！' : ownedCores.length ? `当前最佳覆盖 ${result.covered}/12` : '先添加已有核心'}</h3><p>{result.solution ? '这套核心可以凑出一组完整的 4核6技。' : missing.length ? `还缺：${missing.map((skill) => `${skill.name}×${skill.count}`).join('、')}` : '工具会自动从已有核心中寻找可用组合。'}</p></div>
+function NextCorePanel({
+  recommendations,
+  skills,
+  onPick,
+}: {
+  recommendations: Array<{ core: BoostCore; planCount: number }>;
+  skills: Skill[];
+  onPick: (core: BoostCore) => void;
+}) {
+  return (
+    <section className="next-core-section">
+      <div className="results-heading">
+        <div>
+          <span className="eyebrow">NEXT STEP</span>
+          <h2>下一枚推荐核心</h2>
+        </div>
+        <span>
+          {recommendations.length ? "根据当前已拥有核心反推" : "暂无匹配方案"}
+        </span>
       </div>
-
-      {result.solution ? <div className="solution-list">{result.solution.map((core) => <div className="solution-row" key={core.id}><span>主</span><strong>{skillMap[core.skills[0]].name}</strong><div>{core.skills.map((skill) => <SkillIcon id={skill} size="small" key={skill} />)}</div></div>)}</div> : <div className="empty-result"><strong>{ownedCores.length ? '暂时还拼不成完整组合' : '尚未录入核心'}</strong><p>允许录入超过四颗，计算器会自动挑出正确的四颗。</p></div>}
+      {recommendations.length > 0 && (
+        <div className="next-core-list">
+          {recommendations.slice(0, 8).map((item, index) => (
+            <button
+              className="next-core-item"
+              key={getCoreKey(item.core)}
+              onClick={() => onPick(item.core)}
+            >
+              <b>{String(index + 1).padStart(2, "0")}</b>
+              <div>
+                <SkillBadge
+                  skill={skills.find(
+                    (skill) => skill.id === item.core.mainSkillId,
+                  )}
+                  label="主"
+                />
+                <SkillBadge
+                  skill={skills.find(
+                    (skill) => skill.id === item.core.subSkillIds[0],
+                  )}
+                />
+                <SkillBadge
+                  skill={skills.find(
+                    (skill) => skill.id === item.core.subSkillIds[1],
+                  )}
+                />
+              </div>
+              <span>
+                覆盖 {item.planCount} 个方案
+                <br />
+                <small>点击填入已有核心</small>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </section>
+  );
+}
 
-    <section className="core-rules" id="core-rules"><h2>4核6技判定规则</h2><p>四颗核心共有 12 个技能位；六个目标技能必须各出现两次，并且四颗核心的第一个主技能不能重复。</p></section>
-    {editingId && <CoreEditor initial={editingCore} onCancel={() => setEditingId(null)} onSave={saveCore} />}
-  </main>;
+function ResultList({
+  results,
+  total,
+  filter,
+  setFilter,
+  skillMap,
+  ownedCount,
+  ownedCores,
+  mode,
+}: {
+  results: ScoredResult[];
+  total: number;
+  filter: "all" | "matched" | "remaining";
+  setFilter: (value: "all" | "matched" | "remaining") => void;
+  skillMap: Map<string, Skill>;
+  ownedCount: number;
+  ownedCores: OwnedCore[];
+  mode: CoreMode;
+}) {
+  const [visible, setVisible] = useState(12);
+  return (
+    <section className="results-section">
+      <div className="results-heading">
+        <div>
+          <span className="eyebrow">
+            {mode === "4CORE_4"
+              ? "04 / TRANSITION LAYOUTS"
+              : "04 / CALCULATED LAYOUTS"}
+          </span>
+          <h2>
+            {mode === "4CORE_4" ? "剩余过渡方案" : "剩余方案"}{" "}
+            <em>
+              {results.length} / {total}
+            </em>
+          </h2>
+        </div>
+        <div className="result-filters">
+          <button
+            className={filter === "all" ? "active" : ""}
+            onClick={() => setFilter("all")}
+          >
+            全部
+          </button>
+          {ownedCount > 0 && (
+            <>
+              <button
+                className={filter === "matched" ? "active" : ""}
+                onClick={() => setFilter("matched")}
+              >
+                含已有核心
+              </button>
+              <button
+                className={filter === "remaining" ? "active" : ""}
+                onClick={() => setFilter("remaining")}
+              >
+                仍需替换
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+      {ownedCount > 0 && (
+        <p className="result-note">
+          已按最少替换核心数排序；每个方案标记可直接保留的核心。
+        </p>
+      )}
+      <div className="result-list">
+        {results.slice(0, visible).map((result, index) => (
+          <article
+            className="result-item"
+            key={result.cores
+              .map(
+                (core) => `${core.mainSkillId}-${core.subSkillIds.join("-")}`,
+              )
+              .join("_")}
+          >
+            <div className="result-number">
+              {String(index + 1).padStart(2, "0")}
+            </div>
+            <div className="core-row">
+              {result.cores.map((core) => {
+                const kept = ownedCores.some(
+                  (owned) => getCoreKey(owned) === getCoreKey(core),
+                );
+                return (
+                  <div
+                    className={kept ? "core-block kept" : "core-block"}
+                    key={`${core.mainSkillId}-${core.subSkillIds.join("-")}`}
+                  >
+                    <SkillBadge
+                      skill={skillMap.get(core.mainSkillId)}
+                      label="主"
+                    />
+                    <SkillBadge skill={skillMap.get(core.subSkillIds[0])} />
+                    <SkillBadge skill={skillMap.get(core.subSkillIds[1])} />
+                    {kept && <small className="kept-label">已有，可保留</small>}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="result-meta">
+              {ownedCount > 0 && (
+                <strong>
+                  可保留 {result.matchedCount} 核 · 需替换 {result.replaceCount}{" "}
+                  核
+                </strong>
+              )}
+              <div className="level-summary">
+                {Object.entries(result.skillLevels).map(([id, level]) => (
+                  <span key={id}>
+                    {skillMap.get(id)?.name}
+                    <b>{level}</b>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+      {visible < results.length && (
+        <button
+          className="load-more"
+          onClick={() => setVisible((value) => value + 12)}
+        >
+          加载更多方案
+        </button>
+      )}
+    </section>
+  );
 }

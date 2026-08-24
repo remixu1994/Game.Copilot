@@ -3,5 +3,6 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   base: './',
+  cacheDir: './.vite-cache',
   plugins: [react()],
 });
