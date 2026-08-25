@@ -38,6 +38,9 @@
 .weapon-material-card dl{grid-template-columns:repeat(4,1fr);gap:13px}
 .material-meso-editor dd{position:relative;display:flex!important;align-items:center;max-width:126px;height:34px;border:1px solid #333842;border-radius:8px;background:#0a0c10;overflow:hidden}
 .material-meso-editor input,.material-meso-editor select{min-width:0;width:100%;height:100%;appearance:none;border:0;padding:0 42px 0 8px;outline:0;background:transparent;color:#fff;font-size:14px;font-weight:800}
+.material-meso-editor select{color-scheme:dark;cursor:pointer}
+.material-meso-editor select option{background:#15181e;color:#f7f3e9;font-weight:700}
+.material-meso-editor select option:checked{background:#8a6a27;color:#fff}
 .material-meso-editor span{position:absolute;right:7px;color:#737a85;font-size:9px;pointer-events:none}
 .material-meso-editor dd:focus-within{border-color:#b78e3c}
 .steel-price-editor dd{max-width:150px}
@@ -49,7 +52,9 @@
 .armor-config{margin:52px 0 24px;padding:26px;border:1px solid #262931;border-radius:22px;background:#12141a}
 .armor-config-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
 .armor-config .config-group{margin-top:0}
-.upgrade-select-control select{width:100%;height:44px;appearance:none;border:1px solid #2a2e37;border-radius:10px;padding:0 62px 0 12px;outline:0;background:#0d0f14;color:#fff;font-size:15px;font-weight:700;cursor:pointer}
+.upgrade-select-control select{width:100%;height:44px;appearance:none;border:1px solid #2a2e37;border-radius:10px;padding:0 62px 0 12px;outline:0;background:#0d0f14;color:#fff;color-scheme:dark;font-size:15px;font-weight:700;cursor:pointer}
+.upgrade-select-control select option{background:#15181e;color:#f7f3e9}
+.upgrade-select-control select option:checked{background:#8a6a27;color:#fff}
 .upgrade-select-control select:focus{border-color:#b78e3c}
 .upgrade-select-control:after{content:'⌄';position:absolute;right:43px;top:50%;transform:translateY(-55%);color:#7a808b;font-size:11px;pointer-events:none}
 .powder-sources{margin-top:52px}
