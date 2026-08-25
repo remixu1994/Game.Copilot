@@ -1,0 +1,13 @@
+.core-other-filter {
+  width: max-content;
+  margin: 0 0 9px;
+  padding: 5px 13px;
+  border-radius: 14px;
+  background: #f6f7f8;
+  color: #bdc4ca;
+  font-size: 10px;
+}
+
+.target-skills > div {
+  width: 50px;
+}
