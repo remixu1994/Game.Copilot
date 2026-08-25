@@ -5,6 +5,7 @@ import CurrencyPage from './CurrencyPage';
 import PerfectCorePage from './PerfectCorePage';
 import PerfectCoreDataPage from './PerfectCoreDataPage';
 import LevelTrackerPage from './LevelTrackerPage';
+import EquipmentUpgradePage from './EquipmentUpgradePage';
 import { perfectCoreAdminEnabled } from './perfectCoreAdmin';
 import { currentRoutePath } from './sitePaths';
 import './styles.css';
@@ -20,6 +21,8 @@ const Page = isPerfectCoreAdminPath && perfectCoreAdminEnabled
       ? PerfectCorePage
       : path.startsWith('/level-tracker')
         ? LevelTrackerPage
+      : path.startsWith('/equipment-upgrade')
+        ? EquipmentUpgradePage
       : path.startsWith('/currency')
           ? CurrencyPage
           : HomePage;
