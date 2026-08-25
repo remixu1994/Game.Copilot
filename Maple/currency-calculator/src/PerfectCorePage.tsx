@@ -17,6 +17,7 @@ import type {
   Skill,
   PerfectCoreResult,
 } from "./perfectCoreTypes";
+import { assetPath, sitePath } from "./sitePaths";
 import "./perfect-core.css";
 
 interface OwnedCore extends BoostCore {
@@ -31,7 +32,7 @@ function SkillBadge({ skill, label }: { skill?: Skill; label?: string }) {
     <span className="core-skill">
       <span className="skill-avatar">
         {skill?.iconUrl ? (
-          <img src={skill.iconUrl} alt="" />
+          <img src={assetPath(skill.iconUrl)} alt="" />
         ) : (
           skill?.name.slice(0, 1)
         )}
@@ -215,7 +216,7 @@ export default function PerfectCorePage() {
   return (
     <main className="perfect-shell">
       <header className="perfect-header">
-        <a className="perfect-brand" href="/">
+        <a className="perfect-brand" href={sitePath('/')}>
           Maple<span>Lab</span>
         </a>
         <div>
@@ -278,7 +279,7 @@ export default function PerfectCorePage() {
               >
                 <span className="profession-avatar">
                   {profession.iconUrl ? (
-                    <img src={profession.iconUrl} alt="" />
+                    <img src={assetPath(profession.iconUrl)} alt="" />
                   ) : (
                     profession.name.slice(0, 1)
                   )}
@@ -393,7 +394,7 @@ export default function PerfectCorePage() {
                 >
                   <span className="skill-avatar">
                     {skill.iconUrl ? (
-                      <img src={skill.iconUrl} alt="" />
+                      <img src={assetPath(skill.iconUrl)} alt="" />
                     ) : (
                       skill.name.slice(0, 1)
                     )}

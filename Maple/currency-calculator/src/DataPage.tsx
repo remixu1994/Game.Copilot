@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { sitePath } from './sitePaths';
 import './data.css';
 
 type DataItem = { name: string; description: string; tag?: string };
@@ -95,11 +96,11 @@ export default function DataPage() {
   return (
     <main className="data-page">
       <header className="data-topbar">
-        <a className="data-brand" href="/">Maple<span>Lab</span></a>
+        <a className="data-brand" href={sitePath('/')}>Maple<span>Lab</span></a>
         <nav>
-          <a href="/dps">伤害 DPS 模拟器</a>
-          <a href="/currency">枫币计算器</a>
-          <a className="current" href="/data">基础数据</a>
+          <a href={sitePath('/dps')}>伤害 DPS 模拟器</a>
+          <a href={sitePath('/currency')}>枫币计算器</a>
+          <a className="current" href={sitePath('/data')}>基础数据</a>
         </nav>
         <button type="button" aria-label="打开搜索">⌕</button>
       </header>

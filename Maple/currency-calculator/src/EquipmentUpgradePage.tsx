@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { sitePath } from './sitePaths';
 import './equipment-upgrade.css';
 import './equipment-upgrade-sources.css';
 
@@ -194,8 +195,8 @@ export default function EquipmentUpgradePage() {
 
   return <main className="upgrade-shell">
     <header className="upgrade-header">
-      <div><a className="upgrade-brand" href="/">Maple<span>Lab</span></a><span>/</span><strong>装备升级实验室</strong></div>
-      <nav><a href="/currency">货币工具</a><a href="/dps">DPS 模拟器</a></nav>
+      <div><a className="upgrade-brand" href={sitePath('/')}>Maple<span>Lab</span></a><span>/</span><strong>装备升级实验室</strong></div>
+      <nav><a href={sitePath('/currency')}>货币工具</a><a href={sitePath('/dps')}>DPS 模拟器</a></nav>
     </header>
 
     <section className="upgrade-hero">

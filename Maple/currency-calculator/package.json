@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:admin": "vite --mode admin",
     "build": "tsc -b && vite build",
+    "build:pages": "tsc -b && vite build --mode pages",
     "build:admin": "tsc --noEmit && vite build --mode admin --configLoader runner --outDir dist-admin",
     "preview": "vite preview",
     "test": "vitest run"

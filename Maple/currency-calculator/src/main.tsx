@@ -8,11 +8,12 @@ import PerfectCorePage from './PerfectCorePage';
 import PerfectCoreDataPage from './PerfectCoreDataPage';
 import LevelTrackerPage from './LevelTrackerPage';
 import { perfectCoreAdminEnabled } from './perfectCoreAdmin';
+import { currentRoutePath } from './sitePaths';
 import './styles.css';
 import './modal.css';
 import './attack.css';
 
-const path = window.location.pathname;
+const path = currentRoutePath();
 const isPerfectCoreAdminPath = path.startsWith('/admin/perfect-core/data');
 const Page = isPerfectCoreAdminPath && perfectCoreAdminEnabled
   ? PerfectCoreDataPage
