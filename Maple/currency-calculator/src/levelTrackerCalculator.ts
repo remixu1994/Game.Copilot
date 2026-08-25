@@ -105,10 +105,11 @@ export const defaultSettings: TrackerSettings = {
   endDate: '2026-09-15',
   currentLevel: 203,
   currentPercent: 0.53,
-  requiredExp: 420_000_000_000,
+  requiredExp: 4_743_813_174_257,
   levelRequirements: {
     200: 3_718_527_554_105,
-    203: 420_000_000_000,
+    203: 4_200_000_000_000,
+    206: 4_743_813_174_257,
   },
   eventExtraLevels: 2,
   targetLevel: 206,
@@ -136,7 +137,18 @@ export function weekKey(date: string): string {
 }
 
 export function requiredExperienceForLevel(settings: TrackerSettings, level: number): number {
-  return settings.levelRequirements?.[String(level)] ?? settings.requiredExp;
+  const exact = settings.levelRequirements?.[String(level)];
+  if (exact) return exact;
+  const nearestLevel = Object.keys(settings.levelRequirements ?? {})
+    .map(Number)
+    .filter((configuredLevel) => configuredLevel <= level)
+    .sort((a, b) => b - a)[0];
+  return nearestLevel === undefined ? settings.requiredExp : settings.levelRequirements[String(nearestLevel)];
+}
+
+export function extrapolateLevel206Requirement(level200Required: number, level203Required: number): number {
+  if (level200Required <= 0 || level203Required <= 0) return 1;
+  return Math.round(level203Required * (level203Required / level200Required));
 }
 
 export function addExperience(point: ProgressPoint, exp: number, settings: TrackerSettings): ProgressPoint {

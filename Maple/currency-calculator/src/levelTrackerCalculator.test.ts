@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addExperience, createDefaultRecords, defaultSettings, defaultSources, EXP_PER_YI, projectTracker, sourceExperience, sourceTotals } from './levelTrackerCalculator';
+import { addExperience, createDefaultRecords, defaultSettings, defaultSources, EXP_PER_YI, extrapolateLevel206Requirement, projectTracker, requiredExperienceForLevel, sourceExperience, sourceTotals } from './levelTrackerCalculator';
 
 describe('level tracker calculator', () => {
   it('matches the supplied daily and weekly totals', () => {
@@ -27,15 +27,18 @@ describe('level tracker calculator', () => {
   it('does not count the already completed first-week base tasks again', () => {
     const records = createDefaultRecords(defaultSettings, defaultSources);
     const projection = projectTracker(defaultSettings, defaultSources, records);
-    expect(projection.final.level).toBe(230);
-    expect(projection.final.percent).toBeCloseTo(63.2988, 3);
-    expect(projection.reachedTargetDate).toBeTruthy();
+    expect(projection.final.level).toBe(203);
+    expect(projection.final.percent).toBeGreaterThan(90);
+    expect(projection.final.percent).toBeLessThan(100);
+    expect(projection.reachedTargetDate).toBeNull();
   });
 
   it('keeps overflow and grants two event levels on a natural level-up', () => {
-    const result = addExperience({ level: 203, percent: 99 }, 0.02 * defaultSettings.requiredExp, defaultSettings);
+    const level203Required = defaultSettings.levelRequirements['203'];
+    const level206Required = defaultSettings.levelRequirements['206'];
+    const result = addExperience({ level: 203, percent: 99 }, 0.02 * level203Required, defaultSettings);
     expect(result.level).toBe(206);
-    expect(result.percent).toBeCloseTo(1, 6);
+    expect(result.percent).toBeCloseTo(level203Required * 0.01 / level206Required * 100, 6);
   });
 
   it('switches from the level 200 requirement to the level 203 requirement after upgrading', () => {
@@ -46,13 +49,24 @@ describe('level tracker calculator', () => {
     expect(result.percent).toBeCloseTo(10, 6);
   });
 
+  it('uses 4.2 trillion for level 203 and extrapolates level 206 by the same growth rate', () => {
+    expect(defaultSettings.levelRequirements['203']).toBe(4_200_000_000_000);
+    expect(defaultSettings.levelRequirements['206']).toBe(extrapolateLevel206Requirement(
+      defaultSettings.levelRequirements['200'],
+      defaultSettings.levelRequirements['203'],
+    ));
+    expect(defaultSettings.levelRequirements['206']).toBe(4_743_813_174_257);
+    expect(requiredExperienceForLevel(defaultSettings, 209)).toBe(defaultSettings.levelRequirements['206']);
+  });
+
   it('recalculates after a source is edited or disabled', () => {
     const records = createDefaultRecords(defaultSettings, defaultSources);
     const baseline = projectTracker(defaultSettings, defaultSources, records);
     const edited = defaultSources.map((source) => source.id === 'auto-6h' ? { ...source, enabled: false } : source);
     const recalculated = projectTracker(defaultSettings, edited, records);
     expect(recalculated.totalEarnedExp).toBeLessThan(baseline.totalEarnedExp);
-    expect(recalculated.final.level).toBeLessThan(baseline.final.level);
+    expect(recalculated.final.level).toBe(baseline.final.level);
+    expect(recalculated.final.percent).toBeLessThan(baseline.final.percent);
   });
 
   it('uses an actual daily percentage as the next day baseline', () => {
@@ -115,7 +129,7 @@ describe('level tracker calculator', () => {
     const updated = projectTracker(defaultSettings, defaultSources, records);
 
     expect(updated.weeks[0].earnedExp - baseline.weeks[0].earnedExp).toBeCloseTo(sourceExperience(purchase), 2);
-    expect(updated.weeks[0].end.percent - baseline.weeks[0].end.percent).toBeCloseTo(sourceExperience(purchase) / defaultSettings.requiredExp * 100, 6);
+    expect(updated.weeks[0].end.percent - baseline.weeks[0].end.percent).toBeCloseTo(sourceExperience(purchase) / defaultSettings.levelRequirements['203'] * 100, 6);
   });
 
   it('updates first-week tracked experience without double-counting the baseline', () => {

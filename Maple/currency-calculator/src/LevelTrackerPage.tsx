@@ -5,6 +5,7 @@ import {
   defaultSettings,
   defaultSources,
   EXP_PER_YI,
+  extrapolateLevel206Requirement,
   projectTracker,
   sourceExperience,
   sourceTotals,
@@ -34,9 +35,23 @@ const cloneDefaults = (): StoredTracker => {
 const hydrateSettings = (settings: TrackerSettings): TrackerSettings => ({
   ...defaultSettings,
   ...settings,
-  requiredExp: 420_000_000_000,
-  levelRequirements: { ...defaultSettings.levelRequirements, ...(settings.levelRequirements ?? {}) },
+  requiredExp: defaultSettings.requiredExp,
+  levelRequirements: hydrateLevelRequirements(settings.levelRequirements),
 });
+const hydrateLevelRequirements = (requirements?: Record<string, number>) => {
+  const stored = requirements ?? {};
+  const level200 = stored['200'] ?? defaultSettings.levelRequirements['200'];
+  const level203 = !stored['203'] || stored['203'] === 420_000_000_000
+    ? defaultSettings.levelRequirements['203']
+    : stored['203'];
+  return {
+    ...defaultSettings.levelRequirements,
+    ...stored,
+    200: level200,
+    203: level203,
+    206: stored['206'] ?? extrapolateLevel206Requirement(level200, level203),
+  };
+};
 const hydrateSources = (storedSources: ExperienceSource[]) => {
   const stored = new Map(storedSources.map((source) => [source.id, source]));
   return defaultSources.map((source) => stored.has(source.id) ? { ...source, ...stored.get(source.id) } : { ...source });
@@ -196,12 +211,20 @@ export default function LevelTrackerPage() {
   const updateSetting = <K extends keyof TrackerSettings>(key: K, value: TrackerSettings[K]) => {
     setTracker((current) => ({ ...current, settings: { ...current.settings, [key]: value } }));
   };
-  const updateLevelRequirement = (level: 200 | 203, value: string) => {
+  const updateLevelRequirement = (level: 200 | 203 | 206, value: string) => {
     setTracker((current) => ({
       ...current,
       settings: {
         ...current.settings,
-        levelRequirements: { ...current.settings.levelRequirements, [level]: Math.max(1, Number(value) || 1) },
+        levelRequirements: (() => {
+          const previous = current.settings.levelRequirements;
+          const next: Record<string, number> = { ...previous, [level]: Math.max(1, Number(value) || 1) };
+          const previousSuggested206 = extrapolateLevel206Requirement(previous['200'], previous['203']);
+          if (level !== 206 && previous['206'] === previousSuggested206) {
+            next['206'] = extrapolateLevel206Requirement(next['200'], next['203']);
+          }
+          return next;
+        })(),
       },
     }));
   };
@@ -269,8 +292,7 @@ export default function LevelTrackerPage() {
       <div className="settings-line">
         <label><span>当前等级</span><input type="number" min="1" value={settings.currentLevel} onChange={(event) => updateSetting('currentLevel', Math.max(1, Number(event.target.value) || 1))} /></label>
         <label><span>当前经验</span><span className="suffix-input"><input type="number" min="0" max="100" step="0.01" value={settings.currentPercent} onChange={(event) => updateSetting('currentPercent', Math.max(0, Math.min(100, Number(event.target.value) || 0)))} /><em>%</em></span></label>
-        <label><span>200级升级经验</span><input type="number" min="1" step="1" value={settings.levelRequirements['200']} onChange={(event) => updateLevelRequirement(200, event.target.value)} /></label>
-        <label><span>203级升级经验</span><input type="number" min="1" step="1" value={settings.levelRequirements['203']} onChange={(event) => updateLevelRequirement(203, event.target.value)} /></label>
+        {[200, 203, 206].map((level) => <label className="requirement-field" key={level}><span>{level}级升级经验</span><input type="number" min="1" step="1" value={settings.levelRequirements[String(level)]} onChange={(event) => updateLevelRequirement(level as 200 | 203 | 206, event.target.value)} /><small>{formatYiExp(settings.levelRequirements[String(level)])}{level === 206 ? ' · 按前段涨幅推算' : ''}</small></label>)}
         <label><span>升级活动</span><strong>自然升级 +{settings.eventExtraLevels}级 · 共{settings.eventExtraLevels + 1}级</strong></label>
       </div>
       <div className="command-progress"><span style={{ width: `${Math.min(100, settings.currentPercent)}%` }} /></div>
