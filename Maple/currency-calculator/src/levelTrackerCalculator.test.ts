@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addExperience, createDefaultRecords, defaultSettings, defaultSources, EXP_PER_YI, extrapolateLevel206Requirement, projectTracker, requiredExperienceForLevel, sourceExperience, sourceTotals } from './levelTrackerCalculator';
+import { addExperience, baselineDateForToday, createDefaultRecords, defaultSettings, defaultSources, EXP_PER_YI, extrapolateLevel206Requirement, projectTracker, requiredExperienceForLevel, sourceExperience, sourceTotals } from './levelTrackerCalculator';
 
 describe('level tracker calculator', () => {
   it('matches the supplied daily and weekly totals', () => {
@@ -24,13 +24,39 @@ describe('level tracker calculator', () => {
     expect(sourceExperience(twice)).toBe(21_680_245_220);
   });
 
-  it('does not count the already completed first-week base tasks again', () => {
+  it('does not count any completed baseline-day task again', () => {
     const records = createDefaultRecords(defaultSettings, defaultSources);
     const projection = projectTracker(defaultSettings, defaultSources, records);
+    expect(projection.days[0].earnedExp).toBe(0);
+    expect(projection.days[0].end).toEqual({ level: 203, percent: 0.53 });
     expect(projection.final.level).toBe(203);
     expect(projection.final.percent).toBeGreaterThan(90);
     expect(projection.final.percent).toBeLessThan(100);
     expect(projection.reachedTargetDate).toBeNull();
+  });
+
+  it('starts a later baseline without projecting any earlier dates', () => {
+    const settings = { ...defaultSettings, startDate: '2026-08-26' };
+    const projection = projectTracker(settings, defaultSources, createDefaultRecords(settings, defaultSources));
+    expect(projection.days[0].date).toBe('2026-08-26');
+    expect(projection.days.some((day) => day.date === '2026-08-25')).toBe(false);
+    expect(projection.weeks[0].startDate).toBe('2026-08-26');
+  });
+
+  it('uses today as the fresh baseline while keeping it inside the campaign range', () => {
+    expect(baselineDateForToday('2026-08-26', '2026-08-25', '2026-09-15')).toBe('2026-08-26');
+    expect(baselineDateForToday('2026-08-01', '2026-08-25', '2026-09-15')).toBe('2026-08-25');
+    expect(baselineDateForToday('2026-10-01', '2026-08-25', '2026-09-15')).toBe('2026-09-15');
+  });
+
+  it('counts baseline-day tasks only when the baseline is at the start of day', () => {
+    const endOfDay = { ...defaultSettings, startDate: '2026-08-26', baselineTiming: 'end-of-day' as const };
+    const startOfDay = { ...endOfDay, baselineTiming: 'start-of-day' as const };
+    const endProjection = projectTracker(endOfDay, defaultSources, createDefaultRecords(endOfDay, defaultSources));
+    const startProjection = projectTracker(startOfDay, defaultSources, createDefaultRecords(startOfDay, defaultSources));
+    expect(endProjection.days[0].earnedExp).toBe(0);
+    expect(startProjection.days[0].earnedExp).toBeGreaterThan(endProjection.days[0].earnedExp);
+    expect(startProjection.final.level).toBeGreaterThan(endProjection.final.level);
   });
 
   it('keeps overflow and grants two event levels on a natural level-up', () => {
@@ -123,10 +149,17 @@ describe('level tracker calculator', () => {
     const records = createDefaultRecords(defaultSettings, defaultSources);
     const purchase = defaultSources.find((source) => source.id === 'weekly-reward-2-extra')!;
     const withoutPurchase = records.map((record) => record.date === defaultSettings.startDate
-      ? { ...record, completedSourceIds: record.completedSourceIds.filter((id) => id !== purchase.id) }
+      ? {
+        ...record,
+        completedSourceIds: record.completedSourceIds.filter((id) => id !== purchase.id),
+        baselineIncludedSourceIds: record.baselineIncludedSourceIds?.filter((id) => id !== purchase.id),
+      }
+      : record);
+    const withNewPurchase = withoutPurchase.map((record) => record.date === defaultSettings.startDate
+      ? { ...record, completedSourceIds: [...record.completedSourceIds, purchase.id] }
       : record);
     const baseline = projectTracker(defaultSettings, defaultSources, withoutPurchase);
-    const updated = projectTracker(defaultSettings, defaultSources, records);
+    const updated = projectTracker(defaultSettings, defaultSources, withNewPurchase);
 
     expect(updated.weeks[0].earnedExp - baseline.weeks[0].earnedExp).toBeCloseTo(sourceExperience(purchase), 2);
     expect(updated.weeks[0].end.percent - baseline.weeks[0].end.percent).toBeCloseTo(sourceExperience(purchase) / defaultSettings.levelRequirements['203'] * 100, 6);
