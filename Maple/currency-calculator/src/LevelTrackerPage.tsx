@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { sitePath } from './sitePaths';
 import {
+  baselineDateForToday,
   createDefaultRecords,
   defaultSettings,
   defaultSources,
@@ -23,12 +24,26 @@ interface StoredTracker {
   records: DailyRecord[];
 }
 
-const STORAGE_KEY = 'maplelab-level-tracker-v9';
+const STORAGE_KEY = 'maplelab-level-tracker-v10';
+const PREVIOUS_STORAGE_KEY = 'maplelab-level-tracker-v9';
 const LEGACY_STORAGE_KEY = 'maplelab-level-tracker-v8';
 const OLDER_STORAGE_KEY = 'maplelab-level-tracker-v7';
 const WEEKLY_REWARD_IDS = ['weekly-reward-1', 'weekly-reward-2', 'weekly-reward-3'];
+const localTodayKey = () => {
+  const today = new Date();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${today.getFullYear()}-${month}-${day}`;
+};
+const defaultBaseline = () => {
+  const startDate = baselineDateForToday(localTodayKey(), defaultSettings.startDate, defaultSettings.endDate);
+  return {
+    startDate,
+    baselineTiming: startDate === defaultSettings.startDate ? defaultSettings.baselineTiming : 'start-of-day' as const,
+  };
+};
 const cloneDefaults = (): StoredTracker => {
-  const settings = { ...defaultSettings, levelRequirements: { ...defaultSettings.levelRequirements } };
+  const settings = { ...defaultSettings, ...defaultBaseline(), levelRequirements: { ...defaultSettings.levelRequirements } };
   const sources = defaultSources.map((source) => ({ ...source }));
   return { settings, sources, records: createDefaultRecords(settings, sources) };
 };
@@ -60,11 +75,44 @@ const migrateLegacySources = (storedSources: ExperienceSource[]) => {
   const stored = new Map(storedSources.map((source) => [source.id, source]));
   return defaultSources.map((source) => ({ ...source, enabled: stored.get(source.id)?.enabled ?? source.enabled }));
 };
-const hydrateRecords = (settings: TrackerSettings, sources: ExperienceSource[], records: DailyRecord[]) => {
-  const baselineIds = sources.filter((source) => !source.optionalPurchase).map((source) => source.id);
+const hydrateRecords = (settings: TrackerSettings, _sources: ExperienceSource[], records: DailyRecord[]) => {
   return records.map((record) => record.date === settings.startDate && !record.baselineIncludedSourceIds
-    ? { ...record, baselineIncludedSourceIds: baselineIds }
+    ? { ...record, baselineIncludedSourceIds: settings.baselineTiming === 'end-of-day' ? [...record.completedSourceIds] : [] }
     : record);
+};
+const migratePreviousBaseline = (settings: TrackerSettings, records: DailyRecord[]) => records.map((record) => record.date === settings.startDate
+  ? { ...record, baselineIncludedSourceIds: settings.baselineTiming === 'end-of-day' ? [...record.completedSourceIds] : [] }
+  : record);
+
+const rebaseRecords = (
+  settings: TrackerSettings,
+  sources: ExperienceSource[],
+  records: DailyRecord[],
+  startDate: string,
+  baselineTiming: TrackerSettings['baselineTiming'],
+) => {
+  const nextSettings = { ...settings, startDate, baselineTiming };
+  const defaults = createDefaultRecords(nextSettings, sources);
+  const existingByDate = new Map(records.map((record) => [record.date, record]));
+  const previousWeeklyIds = new Set(records
+    .filter((record) => weekKey(record.date) === weekKey(startDate))
+    .flatMap((record) => record.completedSourceIds)
+    .filter((id) => sources.some((source) => source.id === id && source.frequency === 'weekly')));
+  const hasPreviousWeek = records.some((record) => weekKey(record.date) === weekKey(startDate));
+
+  return defaults.map((record) => {
+    if (record.date === startDate) {
+      if (!hasPreviousWeek) return record;
+      const dailyIds = record.completedSourceIds.filter((id) => sources.some((source) => source.id === id && source.frequency === 'daily'));
+      const completedSourceIds = [...dailyIds, ...previousWeeklyIds];
+      const baselineIncludedSourceIds = baselineTiming === 'end-of-day'
+        ? [...completedSourceIds]
+        : [];
+      return { ...record, completedSourceIds, baselineIncludedSourceIds };
+    }
+    const existing = existingByDate.get(record.date);
+    return existing ? { ...record, completedSourceIds: existing.completedSourceIds, actualPercent: existing.actualPercent } : record;
+  });
 };
 const addDefaultWeeklyPurchases = (settings: TrackerSettings, sources: ExperienceSource[], records: DailyRecord[]) => {
   const purchaseIds = sources.filter((source) => source.optionalPurchase).map((source) => source.id);
@@ -92,6 +140,15 @@ function loadTracker(): StoredTracker {
         const sources = hydrateSources(parsed.sources);
         const settings = hydrateSettings(parsed.settings);
         return { ...parsed, settings, sources, records: hydrateRecords(settings, sources, parsed.records) };
+      }
+    }
+    const previousSaved = window.localStorage.getItem(PREVIOUS_STORAGE_KEY);
+    if (previousSaved) {
+      const parsed = JSON.parse(previousSaved) as StoredTracker;
+      if (parsed.settings && Array.isArray(parsed.sources) && Array.isArray(parsed.records)) {
+        const sources = hydrateSources(parsed.sources);
+        const settings = hydrateSettings(parsed.settings);
+        return { ...parsed, settings, sources, records: migratePreviousBaseline(settings, parsed.records) };
       }
     }
     const legacySaved = window.localStorage.getItem(LEGACY_STORAGE_KEY) ?? window.localStorage.getItem(OLDER_STORAGE_KEY);
@@ -195,8 +252,8 @@ export default function LevelTrackerPage() {
   const [tracker, setTracker] = useState<StoredTracker>(loadTracker);
   const [draftSources, setDraftSources] = useState<ExperienceSource[]>(() => tracker.sources.map((source) => ({ ...source })));
   const [sourcesDirty, setSourcesDirty] = useState(false);
-  const [openWeek, setOpenWeek] = useState<string | null>('2026-08-24');
-  const [openDay, setOpenDay] = useState<string | null>('2026-08-25');
+  const [openWeek, setOpenWeek] = useState<string | null>(() => weekKey(tracker.settings.startDate));
+  const [openDay, setOpenDay] = useState<string | null>(() => tracker.settings.startDate);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const { settings, sources, records } = tracker;
 
@@ -210,6 +267,16 @@ export default function LevelTrackerPage() {
 
   const updateSetting = <K extends keyof TrackerSettings>(key: K, value: TrackerSettings[K]) => {
     setTracker((current) => ({ ...current, settings: { ...current.settings, [key]: value } }));
+  };
+  const updateBaseline = (startDate: string, baselineTiming: TrackerSettings['baselineTiming']) => {
+    if (!startDate || startDate > settings.endDate) return;
+    setTracker((current) => ({
+      ...current,
+      settings: { ...current.settings, startDate, baselineTiming },
+      records: rebaseRecords(current.settings, current.sources, current.records, startDate, baselineTiming),
+    }));
+    setOpenWeek(weekKey(startDate));
+    setOpenDay(startDate);
   };
   const updateLevelRequirement = (level: 200 | 203 | 206, value: string) => {
     setTracker((current) => ({
@@ -270,9 +337,9 @@ export default function LevelTrackerPage() {
     setTracker(defaults);
     setDraftSources(defaults.sources.map((source) => ({ ...source })));
     setSourcesDirty(false);
-    window.localStorage.removeItem(STORAGE_KEY);
-    setOpenWeek('2026-08-24');
-    setOpenDay('2026-08-25');
+    [STORAGE_KEY, PREVIOUS_STORAGE_KEY, LEGACY_STORAGE_KEY, OLDER_STORAGE_KEY].forEach((key) => window.localStorage.removeItem(key));
+    setOpenWeek(weekKey(defaults.settings.startDate));
+    setOpenDay(defaults.settings.startDate);
   };
   const sourceEditorGroups = [
     { key: 'daily', label: '日常任务', note: '单次经验 × 每日次数', items: draftSources.filter((source) => source.frequency === 'daily') },
@@ -283,13 +350,15 @@ export default function LevelTrackerPage() {
   return <main className="tracker-shell">
     <header className="tracker-header">
       <a className="tracker-brand" href={sitePath('/')}>Maple<span>Lab</span></a>
-      <div className="tracker-heading"><span className="tracker-eyebrow">PROGRESSION / DAILY FORECAST</span><h1>等级跟踪器</h1><p>从今天的经验条出发，逐日计算到 9 月 15 日。</p></div>
+      <div className="tracker-heading"><span className="tracker-eyebrow">PROGRESSION / DAILY FORECAST</span><h1>等级跟踪器</h1><p>从当前经验基准出发，自动忽略更早日期并预测到 {formatDate(settings.endDate)}。</p></div>
       <a className="tracker-back" href={sitePath('/')}>返回工具目录 ↗</a>
     </header>
 
     <section className="tracker-command">
-      <div className="command-copy"><span className="tracker-eyebrow">CURRENT BASELINE / 08.25 END OF DAY</span><h2>{formatProgress({ level: settings.currentLevel, percent: settings.currentPercent })}</h2><p>8月25日日常和第一周周本均已完成，经验已包含在当前基准中。</p></div>
+      <div className="command-copy"><span className="tracker-eyebrow">CURRENT BASELINE / {formatShortDate(settings.startDate)} {settings.baselineTiming === 'end-of-day' ? 'END OF DAY' : 'START OF DAY'}</span><h2>{formatProgress({ level: settings.currentLevel, percent: settings.currentPercent })}</h2><p>{formatDate(settings.startDate)}之前的日期不再参与预测；{settings.baselineTiming === 'end-of-day' ? '当日所有已勾选任务均已包含在当前经验中。' : '当日任务将从当前经验继续累计。'}</p></div>
       <div className="settings-line">
+        <label><span>当前数据日期</span><input type="date" min={defaultSettings.startDate} max={settings.endDate} value={settings.startDate} onChange={(event) => updateBaseline(event.target.value, settings.baselineTiming)} /></label>
+        <label><span>当日经验状态</span><select value={settings.baselineTiming} onChange={(event) => updateBaseline(settings.startDate, event.target.value as TrackerSettings['baselineTiming'])}><option value="start-of-day">日初 · 今日尚未计算</option><option value="end-of-day">日终 · 今日已包含</option></select></label>
         <label><span>当前等级</span><input type="number" min="1" value={settings.currentLevel} onChange={(event) => updateSetting('currentLevel', Math.max(1, Number(event.target.value) || 1))} /></label>
         <label><span>当前经验</span><span className="suffix-input"><input type="number" min="0" max="100" step="0.01" value={settings.currentPercent} onChange={(event) => updateSetting('currentPercent', Math.max(0, Math.min(100, Number(event.target.value) || 0)))} /><em>%</em></span></label>
         {[200, 203, 206].map((level) => <label className="requirement-field" key={level}><span>{level}级升级经验</span><input type="number" min="1" step="1" value={settings.levelRequirements[String(level)]} onChange={(event) => updateLevelRequirement(level as 200 | 203 | 206, event.target.value)} /><small>{formatYiExp(settings.levelRequirements[String(level)])}{level === 206 ? ' · 按前段涨幅推算' : ''}</small></label>)}
@@ -299,12 +368,12 @@ export default function LevelTrackerPage() {
     </section>
 
     <section className={`final-forecast ${targetReached ? 'reached' : 'short'}`}>
-      <div><span className="tracker-eyebrow">FINAL / 2026.09.15</span><h2>{formatProgress(projection.final)}</h2><p>{targetReached ? `预计 ${formatDate(projection.reachedTargetDate ?? settings.endDate)} 达到 Lv.${settings.targetLevel}` : `按当前计划尚未达到 Lv.${settings.targetLevel}`}</p></div>
+      <div><span className="tracker-eyebrow">FINAL / {settings.endDate.replaceAll('-', '.')}</span><h2>{formatProgress(projection.final)}</h2><p>{targetReached ? `预计 ${formatDate(projection.reachedTargetDate ?? settings.endDate)} 达到 Lv.${settings.targetLevel}` : `按当前计划尚未达到 Lv.${settings.targetLevel}`}</p></div>
       <dl><div><dt>计划总经验</dt><dd>{formatExp(projection.totalEarnedExp)}</dd></div><div><dt>{targetReached ? '206级经验余量' : '距离升级缺口'}</dt><dd>{formatExp(Math.abs(projection.targetDeltaExp))}</dd></div><div><dt>日常 / 周常</dt><dd>{formatExp(totals.daily)} / {formatExp(totals.weekly)}</dd></div></dl>
     </section>
 
     <section className="weekly-workspace">
-      <div className="section-intro"><div><span className="tracker-eyebrow">01 / WEEKLY TRACKING</span><h2>按周执行与校准</h2></div><p>未来日期默认按全部启用任务完成计算；填入某天实际经验后，后续预测会从实际值继续。</p></div>
+      <div className="section-intro"><div><span className="tracker-eyebrow">01 / WEEKLY TRACKING</span><h2>按周执行与校准</h2></div><p>每天完成后填写实际日终百分比；当天会标记为已校准，后续预测从真实值继续。</p></div>
       <div className="week-list">{projection.weeks.map((week, weekIndex) => {
         const expanded = openWeek === week.key;
         const weekCompletedIds = [...new Set(week.days.flatMap((day) => day.completedSourceIds))];
@@ -313,11 +382,11 @@ export default function LevelTrackerPage() {
           <button className="week-summary" type="button" onClick={() => setOpenWeek(expanded ? null : week.key)}>
             <span className="week-number">0{weekIndex + 1}</span><span className="week-period"><small>{formatShortDate(week.startDate)} — {formatShortDate(week.endDate)}</small><strong>第 {weekIndex + 1} 周</strong></span><span><small>期初</small><strong>{formatProgress(week.start)}</strong></span><span><small>本周任务经验</small><strong>{formatExp(week.trackedExp)}</strong></span><span><small>周末预测</small><strong className="forecast-value">{formatProgress(week.end)}</strong></span><b>{expanded ? '−' : '+'}</b>
           </button>
-          {expanded && <div className="week-days"><WeekTaskPanel sources={sources.filter((source) => source.enabled && source.frequency === 'weekly')} completedIds={weekCompletedIds} onToggle={(source) => toggleTask(weeklyScheduleDate, source)} /><div className="day-row day-head"><span>日期</span><span>日常任务</span><span>获得经验</span><span>预测结果</span><span>实际经验</span><span /></div>{week.days.map((day) => {
+          {expanded && <div className="week-days"><WeekTaskPanel sources={sources.filter((source) => source.enabled && source.frequency === 'weekly')} completedIds={weekCompletedIds} onToggle={(source) => toggleTask(weeklyScheduleDate, source)} /><div className="day-row day-head"><span>日期</span><span>日常任务</span><span>获得经验</span><span>预测结果</span><span>实际日终经验</span><span /></div>{week.days.map((day) => {
             const record = records.find((item) => item.date === day.date)!;
             const activeCompleted = record.completedSourceIds.filter((id) => enabledIds.has(id) && sources.some((source) => source.id === id && source.frequency === 'daily'));
             const dayExpanded = openDay === day.date;
-            return <div className={`day-block ${day.calibrated ? 'calibrated' : ''}`} key={day.date}><div className="day-row"><button className="date-button" type="button" onClick={() => setOpenDay(dayExpanded ? null : day.date)}><small>{new Intl.DateTimeFormat('zh-CN', { weekday: 'short' }).format(new Date(`${day.date}T00:00:00`))}</small><strong>{formatShortDate(day.date)}</strong></button><span className="task-count"><b>{activeCompleted.length}</b> 项</span><strong>{day.date === settings.startDate ? (day.earnedExp > 0 ? `新增 ${formatExp(day.earnedExp)}` : '基准日') : formatExp(day.earnedExp)}</strong><span className="day-result"><small>{formatProgress(day.start)}</small><b>→ {formatProgress(day.predictedEnd)}</b></span>{day.date === settings.startDate ? <span className="baseline-label">{day.earnedExp > 0 ? '基准 + 新增' : '当前基准'}</span> : <label className="actual-input"><input type="number" min="0" max="100" step="0.01" placeholder="未填写" value={record.actualPercent ?? ''} onChange={(event) => updateActualPercent(day.date, event.target.value)} /><em>%</em></label>}<button className="expand-day" type="button" onClick={() => setOpenDay(dayExpanded ? null : day.date)}>{dayExpanded ? '收起' : '日常'}</button></div>{dayExpanded && <div className="day-tasks"><div className="day-task-note"><strong>{formatDate(day.date)}</strong><span>{day.date === settings.startDate ? '已完成日常计入当前基准。' : '取消勾选会立即从当日及后续预测中扣除。'}</span></div><DailyTaskList sources={sources.filter((source) => source.enabled)} completedIds={record.completedSourceIds} onToggle={(source) => toggleTask(day.date, source)} /></div>}</div>;
+            return <div className={`day-block ${day.calibrated ? 'calibrated' : ''}`} key={day.date}><div className="day-row"><button className="date-button" type="button" onClick={() => setOpenDay(dayExpanded ? null : day.date)}><small>{new Intl.DateTimeFormat('zh-CN', { weekday: 'short' }).format(new Date(`${day.date}T00:00:00`))}</small><strong>{formatShortDate(day.date)}</strong></button><span className="task-count"><b>{activeCompleted.length}</b> 项</span><strong>{day.date === settings.startDate ? (day.earnedExp > 0 ? `今日 ${formatExp(day.earnedExp)}` : '基准日') : formatExp(day.earnedExp)}</strong><span className="day-result"><small>{formatProgress(day.start)}</small><b>→ {formatProgress(day.predictedEnd)}</b></span>{day.date === settings.startDate ? <span className="baseline-label">{settings.baselineTiming === 'end-of-day' ? '日终基准' : '从今日开始'}</span> : <label className="actual-input"><input aria-label={`${formatDate(day.date)}实际日终经验百分比`} type="number" min="0" max="100" step="0.01" placeholder="填写校准" value={record.actualPercent ?? ''} onChange={(event) => updateActualPercent(day.date, event.target.value)} /><em>%</em></label>}<button className="expand-day" type="button" onClick={() => setOpenDay(dayExpanded ? null : day.date)}>{dayExpanded ? '收起' : day.calibrated ? '已校准' : '日常'}</button></div>{dayExpanded && <div className="day-tasks"><div className="day-task-note"><strong>{formatDate(day.date)}</strong><span>{day.date === settings.startDate ? (settings.baselineTiming === 'end-of-day' ? '当日全部已勾选任务均已包含在当前基准，不会重复累计。' : '当日任务将从当前经验继续累计。') : day.calibrated ? `实际日终经验已校准为 ${record.actualPercent?.toFixed(2)}%，后续日期从此值继续。` : '取消勾选会立即从当日及后续预测中扣除；填写实际百分比可校准后续预测。'}</span></div><DailyTaskList sources={sources.filter((source) => source.enabled)} completedIds={record.completedSourceIds} onToggle={(source) => toggleTask(day.date, source)} /></div>}</div>;
           })}</div>}
         </article>;
       })}</div>
@@ -328,6 +397,6 @@ export default function LevelTrackerPage() {
       {sourcesOpen && <div className="source-editor-body"><div className="source-editor-head"><span>启用</span><span>任务来源</span><span>单次参数</span><span>每日 / 每次总经验</span><span>周经验参考</span></div>{sourceEditorGroups.map((group) => <div className="source-editor-group" key={group.key}><div className="source-group-title"><span>{group.label}</span><small>{group.note}</small></div>{group.items.map((source) => { const index = draftSources.findIndex((item) => item.id === source.id); const effectiveExp = sourceExperience(source); const purchase = purchaseLabel(source); return <div className={`source-edit-row ${!source.enabled ? 'disabled' : ''} ${source.optionalPurchase ? 'purchase-source' : ''}`} key={source.id}><label className="source-switch"><input type="checkbox" checked={source.enabled} onChange={(event) => updateSource(source.id, { enabled: event.target.checked })} /><i /></label><span className="source-name"><small>{String(index + 1).padStart(2, '0')}</small><span><strong>{source.name}</strong>{purchase && <em>{purchase} · 每周限 1 次</em>}</span></span><SourceParameterEditor source={source} onChange={(patch) => updateSource(source.id, patch)} /><strong className="calculated-exp">{formatYiExp(effectiveExp)}</strong><strong>{source.frequency === 'daily' ? formatYiExp(effectiveExp * 7) : `${formatYiExp(effectiveExp)} / 次`}</strong></div>; })}</div>)}<div className={`source-editor-total ${sourcesDirty ? 'has-changes' : ''}`}><span>草稿汇总<small>{sourcesDirty ? '有未同步修改' : '已同步至周计划'}</small></span><strong>{formatYiExp(draftTotals.daily)} / 天</strong><strong>{formatYiExp(draftTotals.daily * 7)} + {formatYiExp(draftTotals.weekly)} / 完整周</strong><button type="button" onClick={syncSourcesToPlan} disabled={!sourcesDirty}>{sourcesDirty ? '刷新并同步周计划 ↻' : '已同步 ✓'}</button></div></div>}
     </section>
 
-    <footer className="tracker-footer"><span>LAST UPDATED / 2026.08.25</span><button type="button" onClick={resetTracker}>恢复默认数据</button><span>经验单位：亿 / 万亿 · 数据保存在当前浏览器</span></footer>
+    <footer className="tracker-footer"><span>BASELINE / {settings.startDate.replaceAll('-', '.')}</span><button type="button" onClick={resetTracker}>恢复默认数据</button><span>经验单位：亿 / 万亿 · 数据保存在当前浏览器</span></footer>
   </main>;
 }

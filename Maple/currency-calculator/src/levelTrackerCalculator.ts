@@ -2,6 +2,7 @@ export type SourceFrequency = 'daily' | 'weekly';
 
 export interface TrackerSettings {
   startDate: string;
+  baselineTiming: 'start-of-day' | 'end-of-day';
   endDate: string;
   currentLevel: number;
   currentPercent: number;
@@ -102,6 +103,7 @@ export const defaultSources: ExperienceSource[] = [
 
 export const defaultSettings: TrackerSettings = {
   startDate: '2026-08-25',
+  baselineTiming: 'end-of-day',
   endDate: '2026-09-15',
   currentLevel: 203,
   currentPercent: 0.53,
@@ -127,6 +129,12 @@ export function dateRange(startDate: string, endDate: string): string[] {
     current.setUTCDate(current.getUTCDate() + 1);
   }
   return dates;
+}
+
+export function baselineDateForToday(today: string, campaignStart: string, campaignEnd: string): string {
+  if (today < campaignStart) return campaignStart;
+  if (today > campaignEnd) return campaignEnd;
+  return today;
 }
 
 export function weekKey(date: string): string {
@@ -177,7 +185,6 @@ export function createDefaultRecords(settings: TrackerSettings, sources: Experie
   const dailyIds = sources.filter((source) => source.frequency === 'daily').map((source) => source.id);
   const weeklyIds = sources.filter((source) => source.frequency === 'weekly').map((source) => source.id);
   const finalWeekWeeklyIds = sources.filter((source) => source.frequency === 'weekly' && !(source.group === 'weekly-reward' && (source.rewardTier ?? source.optionalPurchase?.rewardTier ?? 0) > 1)).map((source) => source.id);
-  const baselineWeeklyIds = sources.filter((source) => source.frequency === 'weekly' && !source.optionalPurchase).map((source) => source.id);
   const dates = dateRange(settings.startDate, settings.endDate);
   const firstWeek = weekKey(settings.startDate);
   const finalWeek = weekKey(settings.endDate);
@@ -191,7 +198,9 @@ export function createDefaultRecords(settings: TrackerSettings, sources: Experie
       completedSourceIds: date === settings.startDate
         ? [...dailyIds, ...weeklyIds]
         : [...dailyIds, ...(key !== firstWeek && lastDateByWeek.get(key) === date ? scheduledWeeklyIds : [])],
-      baselineIncludedSourceIds: date === settings.startDate ? [...dailyIds, ...baselineWeeklyIds] : undefined,
+      baselineIncludedSourceIds: date === settings.startDate
+        ? settings.baselineTiming === 'end-of-day' ? [...dailyIds, ...weeklyIds] : []
+        : undefined,
       actualPercent: date === settings.startDate ? settings.currentPercent : null,
     };
   });
@@ -211,7 +220,9 @@ export function projectTracker(settings: TrackerSettings, sources: ExperienceSou
       const source = enabled.get(id);
       return sum + (source ? sourceExperience(source) : 0);
     }, 0);
-    const baselineIncluded = new Set(record.baselineIncludedSourceIds ?? (date === settings.startDate ? record.completedSourceIds : []));
+    const baselineIncluded = new Set(record.baselineIncludedSourceIds ?? (
+      date === settings.startDate && settings.baselineTiming === 'end-of-day' ? record.completedSourceIds : []
+    ));
     const earnedExp = date === settings.startDate
       ? record.completedSourceIds.reduce((sum, id) => {
         const source = enabled.get(id);
