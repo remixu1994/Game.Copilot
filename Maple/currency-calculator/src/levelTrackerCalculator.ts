@@ -35,6 +35,8 @@ export interface DailyRecord {
   date: string;
   completedSourceIds: string[];
   baselineIncludedSourceIds?: string[];
+  sourceExpOverrides?: Record<string, number>;
+  sourceUnitOverrides?: Record<string, number>;
   actualPercent: number | null;
 }
 
@@ -52,6 +54,10 @@ export interface DayProjection {
   end: ProgressPoint;
   calibrated: boolean;
   completedSourceIds: string[];
+  claimedWeeklySourceIds: string[];
+  completedWeeklySourceIds: string[];
+  weeklyEarnedExp: number;
+  weeklyTrackedExp: number;
 }
 
 export interface WeekProjection {
@@ -59,7 +65,11 @@ export interface WeekProjection {
   startDate: string;
   endDate: string;
   start: ProgressPoint;
+  dailyEnd: ProgressPoint;
   end: ProgressPoint;
+  dailyEarnedExp: number;
+  weeklyEarnedExp: number;
+  weeklyTrackedExp: number;
   earnedExp: number;
   trackedExp: number;
   days: DayProjection[];
@@ -107,11 +117,11 @@ export const defaultSettings: TrackerSettings = {
   endDate: '2026-09-15',
   currentLevel: 203,
   currentPercent: 0.53,
-  requiredExp: 4_743_813_174_257,
+  requiredExp: 4_302_778_389_349,
   levelRequirements: {
     200: 3_718_527_554_105,
-    203: 4_200_000_000_000,
-    206: 4_743_813_174_257,
+    203: 4_000_000_000_000,
+    206: 4_302_778_389_349,
   },
   eventExtraLevels: 2,
   targetLevel: 206,
@@ -142,6 +152,28 @@ export function weekKey(date: string): string {
   const day = value.getUTCDay() || 7;
   value.setUTCDate(value.getUTCDate() - day + 1);
   return toDateKey(value);
+}
+
+export function resolveWeeklyScheduleDate(
+  settings: TrackerSettings,
+  sources: ExperienceSource[],
+  records: DailyRecord[],
+  targetWeek: string,
+  preferredDate: string,
+): string {
+  const weeklyIds = new Set(sources
+    .filter((source) => source.enabled && source.frequency === 'weekly')
+    .map((source) => source.id));
+  const weekRecords = records.filter((record) => weekKey(record.date) === targetWeek);
+  if (targetWeek === weekKey(settings.startDate)) return settings.startDate;
+  const existingWeeklyRecord = weekRecords.find((record) => (
+    record.completedSourceIds.some((id) => weeklyIds.has(id))
+  ));
+
+  if (existingWeeklyRecord) return existingWeeklyRecord.date;
+  return weekRecords.find((record) => record.date === preferredDate)?.date
+    ?? weekRecords.at(-1)?.date
+    ?? preferredDate;
 }
 
 export function requiredExperienceForLevel(settings: TrackerSettings, level: number): number {
@@ -184,6 +216,15 @@ export function sourceExperience(source: ExperienceSource): number {
 export function createDefaultRecords(settings: TrackerSettings, sources: ExperienceSource[]): DailyRecord[] {
   const dailyIds = sources.filter((source) => source.frequency === 'daily').map((source) => source.id);
   const weeklyIds = sources.filter((source) => source.frequency === 'weekly').map((source) => source.id);
+  const firstWeekBaselineWeeklyIds = sources.filter((source) => source.frequency === 'weekly' && (
+    source.group === 'weekly-dungeon' || (source.rewardTier ?? source.optionalPurchase?.rewardTier) === 1
+  )).map((source) => source.id);
+  const firstWeekSelectedWeeklyIds = sources.filter((source) => source.frequency === 'weekly' && (
+    source.group === 'weekly-dungeon'
+    || (source.rewardTier === 1)
+    || (source.rewardTier === 2 && !source.optionalPurchase)
+    || source.optionalPurchase?.rewardTier === 1
+  )).map((source) => source.id);
   const finalWeekWeeklyIds = sources.filter((source) => source.frequency === 'weekly' && !(source.group === 'weekly-reward' && (source.rewardTier ?? source.optionalPurchase?.rewardTier ?? 0) > 1)).map((source) => source.id);
   const dates = dateRange(settings.startDate, settings.endDate);
   const firstWeek = weekKey(settings.startDate);
@@ -196,10 +237,14 @@ export function createDefaultRecords(settings: TrackerSettings, sources: Experie
     return {
       date,
       completedSourceIds: date === settings.startDate
-        ? [...dailyIds, ...weeklyIds]
-        : [...dailyIds, ...(key !== firstWeek && lastDateByWeek.get(key) === date ? scheduledWeeklyIds : [])],
+        ? [...dailyIds, ...firstWeekBaselineWeeklyIds]
+        : [...dailyIds, ...(lastDateByWeek.get(key) === date
+          ? key === firstWeek
+            ? firstWeekSelectedWeeklyIds.filter((id) => !firstWeekBaselineWeeklyIds.includes(id))
+            : scheduledWeeklyIds
+          : [])],
       baselineIncludedSourceIds: date === settings.startDate
-        ? settings.baselineTiming === 'end-of-day' ? [...dailyIds, ...weeklyIds] : []
+        ? settings.baselineTiming === 'end-of-day' ? [...dailyIds, ...firstWeekBaselineWeeklyIds] : []
         : undefined,
       actualPercent: date === settings.startDate ? settings.currentPercent : null,
     };
@@ -209,16 +254,35 @@ export function createDefaultRecords(settings: TrackerSettings, sources: Experie
 export function projectTracker(settings: TrackerSettings, sources: ExperienceSource[], records: DailyRecord[]): TrackerProjection {
   const enabled = new Map(sources.filter((source) => source.enabled).map((source) => [source.id, source]));
   const recordsByDate = new Map(records.map((record) => [record.date, record]));
+  const dates = dateRange(settings.startDate, settings.endDate);
+  const lastDateByWeek = new Map<string, string>();
+  dates.forEach((date) => lastDateByWeek.set(weekKey(date), date));
   const days: DayProjection[] = [];
+  const weeklyBaselineIds = new Map<string, Set<string>>();
+  records.forEach((record) => {
+    const key = weekKey(record.date);
+    const baseline = weeklyBaselineIds.get(key) ?? new Set<string>();
+    for (const id of record.baselineIncludedSourceIds ?? []) baseline.add(id);
+    weeklyBaselineIds.set(key, baseline);
+  });
+  const completedWeeklyIds = new Map<string, Set<string>>();
   let point: ProgressPoint = { level: settings.currentLevel, percent: settings.currentPercent };
   let reachedTargetDate: string | null = point.level >= settings.targetLevel ? settings.startDate : null;
 
-  for (const date of dateRange(settings.startDate, settings.endDate)) {
+  for (const date of dates) {
     const record = recordsByDate.get(date) ?? { date, completedSourceIds: [], actualPercent: null };
     const start = { ...point };
+    const recordSourceExperience = (source: ExperienceSource) => {
+      const unitOverride = record.sourceUnitOverrides?.[source.id];
+      if (unitOverride !== undefined && source.calculation) {
+        return sourceExperience({ ...source, calculation: { ...source.calculation, units: Math.max(0, unitOverride) } });
+      }
+      return record.sourceExpOverrides?.[source.id] ?? sourceExperience(source);
+    };
     const trackedExp = record.completedSourceIds.reduce((sum, id) => {
       const source = enabled.get(id);
-      return sum + (source ? sourceExperience(source) : 0);
+      if (source?.frequency !== 'daily') return sum;
+      return sum + Math.max(0, recordSourceExperience(source));
     }, 0);
     const baselineIncluded = new Set(record.baselineIncludedSourceIds ?? (
       date === settings.startDate && settings.baselineTiming === 'end-of-day' ? record.completedSourceIds : []
@@ -226,30 +290,65 @@ export function projectTracker(settings: TrackerSettings, sources: ExperienceSou
     const earnedExp = date === settings.startDate
       ? record.completedSourceIds.reduce((sum, id) => {
         const source = enabled.get(id);
-        return sum + (!baselineIncluded.has(id) && source ? sourceExperience(source) : 0);
+        if (source?.frequency !== 'daily') return sum;
+        return sum + (!baselineIncluded.has(id) ? Math.max(0, recordSourceExperience(source)) : 0);
       }, 0)
       : trackedExp;
-    const predictedEnd = addExperience(start, earnedExp, settings);
+    const key = weekKey(date);
+    const completedInWeek = completedWeeklyIds.get(key) ?? new Set<string>();
+    const claimedWeeklySourceIds = [...new Set(record.completedSourceIds)]
+      .filter((id) => enabled.get(id)?.frequency === 'weekly' && !completedInWeek.has(id));
+    const weeklyTrackedExp = claimedWeeklySourceIds.reduce((sum, id) => sum + sourceExperience(enabled.get(id)!), 0);
+    const baselineIncludedIds = weeklyBaselineIds.get(key) ?? new Set<string>();
+    const weeklyEarnedExp = claimedWeeklySourceIds.reduce((sum, id) => (
+      sum + (baselineIncludedIds.has(id) ? 0 : sourceExperience(enabled.get(id)!))
+    ), 0);
+    claimedWeeklySourceIds.forEach((id) => completedInWeek.add(id));
+    completedWeeklyIds.set(key, completedInWeek);
+    const predictedEnd = addExperience(start, earnedExp + weeklyEarnedExp, settings);
     const calibrated = record.actualPercent !== null && date !== settings.startDate;
     point = calibrated
       ? { level: predictedEnd.level, percent: Math.max(0, Math.min(100, record.actualPercent ?? predictedEnd.percent)) }
       : predictedEnd;
     if (!reachedTargetDate && point.level >= settings.targetLevel) reachedTargetDate = date;
-    days.push({ date, start, earnedExp, trackedExp, predictedEnd, end: { ...point }, calibrated, completedSourceIds: record.completedSourceIds });
+    days.push({
+      date,
+      start,
+      earnedExp,
+      trackedExp,
+      predictedEnd,
+      end: { ...point },
+      calibrated,
+      completedSourceIds: record.completedSourceIds,
+      claimedWeeklySourceIds,
+      completedWeeklySourceIds: [...completedInWeek],
+      weeklyEarnedExp,
+      weeklyTrackedExp,
+    });
   }
 
   const grouped = new Map<string, DayProjection[]>();
   days.forEach((day) => grouped.set(weekKey(day.date), [...(grouped.get(weekKey(day.date)) ?? []), day]));
-  const weeks = [...grouped.entries()].map(([key, weekDays]) => ({
-    key,
-    startDate: weekDays[0].date,
-    endDate: weekDays[weekDays.length - 1].date,
-    start: weekDays[0].start,
-    end: weekDays[weekDays.length - 1].end,
-    earnedExp: weekDays.reduce((sum, day) => sum + day.earnedExp, 0),
-    trackedExp: weekDays.reduce((sum, day) => sum + day.trackedExp, 0),
-    days: weekDays,
-  }));
+  const weeks = [...grouped.entries()].map(([key, weekDays]) => {
+    const dailyEarnedExp = weekDays.reduce((sum, day) => sum + day.earnedExp, 0);
+    const dailyTrackedExp = weekDays.reduce((sum, day) => sum + day.trackedExp, 0);
+    const weeklyEarnedExp = weekDays.reduce((sum, day) => sum + day.weeklyEarnedExp, 0);
+    const weeklyTrackedExp = weekDays.reduce((sum, day) => sum + day.weeklyTrackedExp, 0);
+    return {
+      key,
+      startDate: weekDays[0].date,
+      endDate: weekDays[weekDays.length - 1].date,
+      start: weekDays[0].start,
+      dailyEnd: weekDays[weekDays.length - 1].end,
+      end: weekDays[weekDays.length - 1].end,
+      dailyEarnedExp,
+      weeklyEarnedExp,
+      weeklyTrackedExp,
+      earnedExp: dailyEarnedExp + weeklyEarnedExp,
+      trackedExp: dailyTrackedExp + weeklyTrackedExp,
+      days: weekDays,
+    };
+  });
   const final = days.at(-1)?.end ?? point;
   let targetDeltaExp: number;
   if (final.level >= settings.targetLevel) {
@@ -269,7 +368,7 @@ export function projectTracker(settings: TrackerSettings, sources: ExperienceSou
     days,
     weeks,
     final,
-    totalEarnedExp: days.reduce((sum, day) => sum + day.earnedExp, 0),
+    totalEarnedExp: weeks.reduce((sum, week) => sum + week.earnedExp, 0),
     reachedTargetDate,
     targetDeltaExp,
   };
