@@ -1,0 +1,28 @@
+node_modules/
+dist/
+dist-admin/
+.vite-cache/
+*.tsbuildinfo
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Test and tool output
+coverage/
+*.log
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local planning notes
+task_plan.md
+findings.md
+progress.md
+
+# Legacy workspace content kept only on this machine
+/Maple/
