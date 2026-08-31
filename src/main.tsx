@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import App from './App';
 import HomePage from './HomePage';
 import CurrencyPage from './CurrencyPage';
 import PerfectCorePage from './PerfectCorePage';
@@ -21,6 +22,8 @@ const Page = isPerfectCoreAdminPath && perfectCoreAdminEnabled
       ? PerfectCorePage
       : path.startsWith('/level-tracker')
         ? LevelTrackerPage
+      : path.startsWith('/dps')
+        ? App
       : path.startsWith('/equipment-upgrade')
         ? EquipmentUpgradePage
       : path.startsWith('/currency')
