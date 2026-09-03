@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-admin/
+.npm-cache/
+coverage/
+public/
+Maple/
+src/features/perfect-core/perfectCoreReferenceData.generated.ts

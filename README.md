@@ -35,7 +35,20 @@ npm run preview      # 预览生产构建
 ├─ .github/workflows/  # GitHub Pages 部署
 ├─ public/             # 静态图片、SQLite 数据与 WASM 资源
 ├─ scripts/            # 数据同步脚本
-├─ src/                # React 页面、样式、计算与测试
+├─ src/
+│  ├─ app/             # 应用路由与顶层组合
+│  ├─ features/        # 按业务模块组织页面、计算、测试、样式和数据
+│  │  ├─ currency/
+│  │  ├─ data/
+│  │  ├─ dps/
+│  │  ├─ equipment-upgrade/
+│  │  ├─ home/
+│  │  ├─ level-tracker/
+│  │  └─ perfect-core/
+│  ├─ shared/          # 跨模块复用的无业务工具
+│  ├─ styles/          # 应用级全局样式
+│  ├─ types/           # 第三方与全局类型声明
+│  └─ main.tsx         # Vite/React 启动入口
 ├─ index.html
 ├─ package.json
 ├─ tsconfig.json
@@ -43,3 +56,11 @@ npm run preview      # 预览生产构建
 ```
 
 站点由 GitHub Actions 自动测试、构建并部署到 GitHub Pages。
+
+## 代码组织约定
+
+- 新业务功能放在 `src/features/<feature-name>`，页面、计算逻辑、测试和私有样式保持在同一模块内。
+- 只有被多个业务模块使用的代码才放入 `src/shared`。
+- `src/app` 只负责路由和顶层组合，不承载业务计算。
+- 测试文件与被测试实现相邻，命名为 `*.test.ts`。
+- 页面组件使用 PascalCase，计算和工具文件使用 camelCase，目录使用 kebab-case。
