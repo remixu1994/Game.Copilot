@@ -26,6 +26,14 @@ export type ShopItemMetrics = {
   differenceEfficiency: number | null;
 };
 
+export function differenceDescription(differenceEfficiency: number | null) {
+  if (differenceEfficiency === null) return null;
+  if (differenceEfficiency < 0) {
+    return { label: '比水晶商店贵', percent: Math.abs(differenceEfficiency) * 100 };
+  }
+  return { label: '节省', percent: differenceEfficiency * 100 };
+}
+
 export function calculateShopItemMetrics(
   item: ShopItem,
   ratio: number,

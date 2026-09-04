@@ -6,7 +6,6 @@ import {
   defaultSettings,
   defaultSources,
   EXP_PER_YI,
-  extrapolateLevel206Requirement,
   projectTracker,
   requiredExperienceForLevel,
   resolveWeeklyScheduleDate,
@@ -126,18 +125,10 @@ describe('level tracker calculator', () => {
     expect(result.percent).toBeCloseTo(10, 6);
   });
 
-  it('uses 4 trillion for level 203 and extrapolates level 206 by the same growth rate', () => {
-    expect(defaultSettings.levelRequirements['203']).toBe(4_000_000_000_000);
-    expect(defaultSettings.levelRequirements['206']).toBe(
-      extrapolateLevel206Requirement(
-        defaultSettings.levelRequirements['200'],
-        defaultSettings.levelRequirements['203'],
-      ),
-    );
-    expect(defaultSettings.levelRequirements['206']).toBe(4_302_778_389_349);
-    expect(requiredExperienceForLevel(defaultSettings, 209)).toBe(
-      defaultSettings.levelRequirements['206'],
-    );
+  it('uses the provided table for each level instead of extrapolating level 206', () => {
+    expect(defaultSettings.levelRequirements['203']).toBe(3_936_332_000_000);
+    expect(defaultSettings.levelRequirements['206']).toBe(4_253_164_000_000);
+    expect(requiredExperienceForLevel(defaultSettings, 209)).toBe(4_553_537_000_000);
   });
 
   it('recalculates after a source is edited or disabled', () => {

@@ -6,7 +6,7 @@ import {
   defaultSettings,
   defaultSources,
   EXP_PER_YI,
-  extrapolateLevel206Requirement,
+  requiredExperienceForLevel,
   projectTracker,
   sourceExperience,
   sourceTotals,
@@ -16,6 +16,12 @@ import {
   type ProgressPoint,
   type TrackerSettings,
 } from './levelTrackerCalculator';
+import {
+  hydrateLevelRequirements,
+  LEVEL_EXPERIENCE_VERSION,
+  referenceLevelRequirements,
+} from './levelExperienceData';
+import LevelExperienceTable from './LevelExperienceTable';
 import './level-tracker.css';
 
 interface StoredTracker {
@@ -63,28 +69,12 @@ const hydrateSettings = (settings: TrackerSettings): TrackerSettings => ({
   ...defaultSettings,
   ...settings,
   requiredExp: defaultSettings.requiredExp,
-  levelRequirements: hydrateLevelRequirements(settings.levelRequirements),
+  levelRequirements: hydrateLevelRequirements(
+    settings.levelRequirements,
+    settings.levelRequirementsVersion,
+  ),
+  levelRequirementsVersion: LEVEL_EXPERIENCE_VERSION,
 });
-const hydrateLevelRequirements = (requirements?: Record<string, number>) => {
-  const stored = requirements ?? {};
-  const level200 = stored['200'] ?? defaultSettings.levelRequirements['200'];
-  const previousLevel203 = 4_200_000_000_000;
-  const shouldMigrateLevel203 =
-    !stored['203'] || stored['203'] === 420_000_000_000 || stored['203'] === previousLevel203;
-  const level203 = shouldMigrateLevel203 ? defaultSettings.levelRequirements['203'] : stored['203'];
-  const previousSuggested206 = extrapolateLevel206Requirement(level200, previousLevel203);
-  const level206 =
-    !stored['206'] || (shouldMigrateLevel203 && stored['206'] === previousSuggested206)
-      ? extrapolateLevel206Requirement(level200, level203)
-      : stored['206'];
-  return {
-    ...defaultSettings.levelRequirements,
-    ...stored,
-    200: level200,
-    203: level203,
-    206: level206,
-  };
-};
 const hydrateSources = (storedSources: ExperienceSource[]) => {
   const stored = new Map(storedSources.map((source) => [source.id, source]));
   return defaultSources.map((source) =>
@@ -923,26 +913,15 @@ export default function LevelTrackerPage() {
     setOpenWeek(weekKey(startDate));
     setOpenDay(startDate);
   };
-  const updateLevelRequirement = (level: 200 | 203 | 206, value: string) => {
+  const updateLevelRequirement = (level: number, value: string) => {
     setTracker((current) => ({
       ...current,
       settings: {
         ...current.settings,
-        levelRequirements: (() => {
-          const previous = current.settings.levelRequirements;
-          const next: Record<string, number> = {
-            ...previous,
-            [level]: Math.max(1, Number(value) || 1),
-          };
-          const previousSuggested206 = extrapolateLevel206Requirement(
-            previous['200'],
-            previous['203'],
-          );
-          if (level !== 206 && previous['206'] === previousSuggested206) {
-            next['206'] = extrapolateLevel206Requirement(next['200'], next['203']);
-          }
-          return next;
-        })(),
+        levelRequirements: {
+          ...current.settings.levelRequirements,
+          [level]: Math.max(1, Number(value) || 1),
+        },
       },
     }));
   };
@@ -1216,24 +1195,27 @@ export default function LevelTrackerPage() {
               <em>%</em>
             </span>
           </label>
-          {[200, 203, 206].map((level) => (
-            <label className="requirement-field" key={level}>
-              <span>{level}级升级经验</span>
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={settings.levelRequirements[String(level)]}
-                onChange={(event) =>
-                  updateLevelRequirement(level as 200 | 203 | 206, event.target.value)
-                }
-              />
-              <small>
-                {formatYiExp(settings.levelRequirements[String(level)])}
-                {level === 206 ? ' · 按前段涨幅推算' : ''}
-              </small>
-            </label>
-          ))}
+          {[0, 1, 2]
+            .map((step) => settings.currentLevel + step * (settings.eventExtraLevels + 1))
+            .map((level) => (
+              <label className="requirement-field" key={level}>
+                <span>{level}级升级经验</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={requiredExperienceForLevel(settings, level)}
+                  onChange={(event) => updateLevelRequirement(level, event.target.value)}
+                />
+                <small>
+                  {formatYiExp(requiredExperienceForLevel(settings, level))}
+                  {!settings.levelRequirements[String(level)] &&
+                  !referenceLevelRequirements[String(level)]
+                    ? ' · 缺少数据，暂用邻近等级估算'
+                    : ''}
+                </small>
+              </label>
+            ))}
           <label>
             <span>升级活动</span>
             <strong>
@@ -1273,6 +1255,35 @@ export default function LevelTrackerPage() {
           </div>
         </dl>
       </section>
+
+      {!settings.levelRequirements[String(projection.final.level)] && (
+        <p role="status">
+          预测已超出已录入的等级经验范围，缺失等级暂沿用邻近等级经验，结果仅供估算。可在顶部填写对应等级的升级经验。
+        </p>
+      )}
+      <LevelExperienceTable
+        requirements={settings.levelRequirements}
+        onChange={updateLevelRequirement}
+        onUseReference={() => {
+          if (
+            !window.confirm(
+              '将 199–250 级的升级经验替换为图片参考值？此操作不会清除任务和每日校准记录。',
+            )
+          )
+            return;
+          setTracker((current) => ({
+            ...current,
+            settings: {
+              ...current.settings,
+              levelRequirements: {
+                ...current.settings.levelRequirements,
+                ...referenceLevelRequirements,
+              },
+              levelRequirementsVersion: LEVEL_EXPERIENCE_VERSION,
+            },
+          }));
+        }}
+      />
 
       <section className="source-editor">
         <button

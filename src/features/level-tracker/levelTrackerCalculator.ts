@@ -1,3 +1,5 @@
+import { LEVEL_EXPERIENCE_VERSION, referenceLevelRequirements } from './levelExperienceData';
+
 export type SourceFrequency = 'daily' | 'weekly';
 
 export interface TrackerSettings {
@@ -8,6 +10,7 @@ export interface TrackerSettings {
   currentPercent: number;
   requiredExp: number;
   levelRequirements: Record<string, number>;
+  levelRequirementsVersion?: string;
   eventExtraLevels: number;
   targetLevel: number;
 }
@@ -243,12 +246,9 @@ export const defaultSettings: TrackerSettings = {
   endDate: '2026-09-15',
   currentLevel: 203,
   currentPercent: 0.53,
-  requiredExp: 4_302_778_389_349,
-  levelRequirements: {
-    200: 3_718_527_554_105,
-    203: 4_000_000_000_000,
-    206: 4_302_778_389_349,
-  },
+  requiredExp: referenceLevelRequirements['203'],
+  levelRequirements: { ...referenceLevelRequirements },
+  levelRequirementsVersion: LEVEL_EXPERIENCE_VERSION,
   eventExtraLevels: 2,
   targetLevel: 206,
 };
@@ -311,7 +311,8 @@ export function resolveWeeklyScheduleDate(
 }
 
 export function requiredExperienceForLevel(settings: TrackerSettings, level: number): number {
-  const exact = settings.levelRequirements?.[String(level)];
+  const exact =
+    settings.levelRequirements?.[String(level)] ?? referenceLevelRequirements[String(level)];
   if (exact) return exact;
   const nearestLevel = Object.keys(settings.levelRequirements ?? {})
     .map(Number)

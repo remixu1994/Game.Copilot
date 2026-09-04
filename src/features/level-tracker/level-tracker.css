@@ -1566,6 +1566,69 @@
   color: var(--lt-green);
   font-weight: 800;
 }
+.level-experience-reference {
+  margin: 24px 0;
+  border-top: 1px solid var(--lt-line);
+  border-bottom: 1px solid var(--lt-line);
+  font-size: 14px;
+}
+.level-experience-reference summary {
+  padding: 20px 0;
+  cursor: pointer;
+  font-weight: 800;
+}
+.level-experience-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-bottom: 16px;
+}
+.level-experience-toolbar p {
+  flex: 1 1 400px;
+  margin: 0;
+  color: var(--lt-muted);
+  line-height: 1.6;
+}
+.level-experience-reference button,
+.level-experience-reference input {
+  padding: 10px;
+  border: 1px solid var(--lt-line);
+  background: #fff;
+  color: #232b30;
+  font: inherit;
+}
+.level-experience-reference button {
+  cursor: pointer;
+}
+.level-experience-scroll {
+  max-height: 520px;
+  overflow: auto;
+  margin-bottom: 20px;
+}
+.level-experience-reference table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.level-experience-reference th,
+.level-experience-reference td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--lt-line);
+  white-space: nowrap;
+}
+.level-experience-reference thead th {
+  position: sticky;
+  top: 0;
+  background: #ebe9e1;
+  z-index: 1;
+}
+.level-experience-reference input {
+  width: 210px;
+}
+
 .day-exp {
   display: grid;
   gap: 4px;

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { calculateShopItemMetrics, prepareShopItems, type ShopItem } from './currencyShop';
+import {
+  calculateShopItemMetrics,
+  differenceDescription,
+  prepareShopItems,
+  type ShopItem,
+} from './currencyShop';
 
 const items: ShopItem[] = [
   { name: '普通商品', eventCoins: 100, crystalPrice: 40, icon: '普' },
@@ -29,5 +34,13 @@ describe('currency shop ranking', () => {
     const original = prepareShopItems(items, 0.25, 'original');
 
     expect(original.map(({ item }) => item.name)).toEqual(items.map((item) => item.name));
+  });
+
+  it('describes negative differences as more expensive instead of negative savings', () => {
+    expect(differenceDescription(-0.25)).toEqual({
+      label: '比水晶商店贵',
+      percent: 25,
+    });
+    expect(differenceDescription(0.25)).toEqual({ label: '节省', percent: 25 });
   });
 });

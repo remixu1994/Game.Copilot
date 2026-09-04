@@ -3,7 +3,12 @@ import { sitePath } from '../../shared/lib/sitePaths';
 import CurrencyBenchmarkPanel from '../../shared/currency/CurrencyBenchmarkPanel';
 import { calculateCurrencyBenchmark } from '../../shared/currency/currencyBenchmark';
 import { useCurrencyPriceSystem } from '../../shared/currency/useCurrencyPriceSystem';
-import { prepareShopItems, type ShopItem, type ShopSortMode } from './currencyShop';
+import {
+  differenceDescription,
+  prepareShopItems,
+  type ShopItem,
+  type ShopSortMode,
+} from './currencyShop';
 import './currency.css';
 import './currency-theme.css';
 
@@ -87,6 +92,7 @@ const readRatio = (key: string, fallback: number) => {
 function EventShopPage() {
   const [redDiamonds, setRedDiamonds] = useState(() => readRatio('maple-red-diamonds', 500));
   const [eventCoins, setEventCoins] = useState(() => readRatio('maple-event-coins', 1800));
+  const [sortMode, setSortMode] = useState<ShopSortMode>('difference-efficiency');
   useEffect(() => {
     window.localStorage.setItem('maple-red-diamonds', String(redDiamonds));
   }, [redDiamonds]);
@@ -94,6 +100,10 @@ function EventShopPage() {
     window.localStorage.setItem('maple-event-coins', String(eventCoins));
   }, [eventCoins]);
   const ratio = useMemo(() => redDiamonds / eventCoins, [redDiamonds, eventCoins]);
+  const rankedItems = useMemo(
+    () => prepareShopItems(shopItems, ratio, sortMode),
+    [ratio, sortMode],
+  );
   const comparableItems = shopItems.filter(
     (item) =>
       item.crystalPrice !== undefined &&
@@ -208,7 +218,16 @@ function EventShopPage() {
               水晶商店按“每个”归一化比较；蓝钻、混合货币、不同等级粉末或暂无价格的商品只标注，不参与红钻差额计算。
             </p>
           </div>
-          <span className="shop-note">红钻价值按当前比例实时更新</span>
+          <label className="shop-sort">
+            <span>列表排序</span>
+            <select
+              value={sortMode}
+              onChange={(event) => setSortMode(event.target.value as ShopSortMode)}
+            >
+              <option value="difference-efficiency">性价比：高 → 低</option>
+              <option value="original">原始录入顺序</option>
+            </select>
+          </label>
         </div>
         <div className="currency-table">
           <div className="currency-row currency-row-head">
@@ -220,25 +239,24 @@ function EventShopPage() {
             <span>私人商店 / 个</span>
             <span>差额 / 个</span>
           </div>
-          {shopItems.map((item) => {
-            const redValue = item.eventCoins * ratio;
-            const quantity = item.crystalQuantity ?? 1;
-            const currency = item.crystalCurrency ?? 'red';
-            const crystalUnitPrice =
-              item.crystalPrice === undefined ? null : item.crystalPrice / quantity;
-            const difference =
-              crystalUnitPrice !== null && item.crystalComparable !== false && currency === 'red'
-                ? crystalUnitPrice - redValue
-                : null;
-            const privateUnitPrice =
-              item.privatePrice === undefined
-                ? null
-                : item.privatePrice / (item.privateQuantity ?? 1);
+          {rankedItems.map((metrics, rank) => {
+            const {
+              item,
+              redValue,
+              quantity,
+              currency,
+              crystalUnitPrice,
+              privateUnitPrice,
+              difference,
+              differenceEfficiency,
+            } = metrics;
+            const comparison = differenceDescription(differenceEfficiency);
             const currencyLabel =
               currency === 'blue' ? '蓝钻' : currency === 'mixed' ? '混合' : '红钻';
             return (
               <div className="currency-row" key={item.name}>
                 <span className="item-name">
+                  <b className="shop-rank">{String(rank + 1).padStart(2, '0')}</b>
                   <span className="item-image">
                     {item.image ? <img src={item.image} alt="" /> : <b>{item.icon}</b>}
                   </span>
@@ -273,13 +291,25 @@ function EventShopPage() {
                   {privateUnitPrice === null ? '—' : `${number(privateUnitPrice)} 红钻`}
                 </span>
                 <span
-                  className={
+                  className={`difference-cell ${
                     difference === null ? 'muted' : difference >= 0 ? 'positive' : 'negative'
-                  }
+                  }`}
                 >
-                  {difference === null
-                    ? '暂不比较'
-                    : `${difference >= 0 ? '+' : ''}${number(difference)}`}
+                  {difference === null ? (
+                    '暂不比较'
+                  ) : (
+                    <>
+                      <b>
+                        {difference >= 0 ? '+' : ''}
+                        {number(difference)}
+                      </b>
+                      {comparison && (
+                        <small>
+                          {comparison.label} {number(comparison.percent, 1)}%
+                        </small>
+                      )}
+                    </>
+                  )}
                 </span>
               </div>
             );

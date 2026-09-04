@@ -178,6 +178,10 @@
   justify-content: space-between;
   gap: 20px;
 }
+.shop-heading .shop-sort {
+  align-self: end;
+  margin-bottom: 0;
+}
 .shop-heading p {
   margin: 0 0 18px;
   color: #8994a9;
@@ -400,7 +404,7 @@
   min-width: 170px;
   margin-bottom: 18px;
   color: #8994a9;
-  font-size: 12px;
+  font-size: 14px;
 }
 .shop-sort select {
   height: 40px;
@@ -425,7 +429,7 @@
   border-radius: 7px;
   background: rgba(130, 169, 255, 0.12);
   color: #9eb9ff !important;
-  font-size: 11px !important;
+  font-size: 14px !important;
   font-weight: 850;
 }
 .difference-cell {
@@ -436,7 +440,7 @@
   font-size: 14px;
 }
 .difference-cell small {
-  font-size: 11px !important;
+  font-size: 14px !important;
   color: currentColor !important;
 }
 @media (max-width: 760px) {
