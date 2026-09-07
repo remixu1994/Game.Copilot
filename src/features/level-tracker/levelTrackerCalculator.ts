@@ -256,6 +256,12 @@ export const defaultSettings: TrackerSettings = {
 const parseDate = (date: string) => new Date(`${date}T00:00:00Z`);
 export const toDateKey = (date: Date) => date.toISOString().slice(0, 10);
 
+export function previousDateKey(date: string): string {
+  const previous = parseDate(date);
+  previous.setUTCDate(previous.getUTCDate() - 1);
+  return toDateKey(previous);
+}
+
 export function dateRange(startDate: string, endDate: string): string[] {
   const dates: string[] = [];
   const current = parseDate(startDate);

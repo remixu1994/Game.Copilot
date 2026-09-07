@@ -7,6 +7,7 @@ import {
   defaultSources,
   EXP_PER_YI,
   projectTracker,
+  previousDateKey,
   requiredExperienceForLevel,
   resolveWeeklyScheduleDate,
   sourceExperience,
@@ -72,6 +73,47 @@ describe('level tracker calculator', () => {
     expect(baselineDateForToday('2026-08-26', '2026-08-25', '2026-09-15')).toBe('2026-08-26');
     expect(baselineDateForToday('2026-08-01', '2026-08-25', '2026-09-15')).toBe('2026-08-25');
     expect(baselineDateForToday('2026-10-01', '2026-08-25', '2026-09-15')).toBe('2026-09-15');
+  });
+
+  it('resolves the previous calendar date for a last-night baseline', () => {
+    expect(previousDateKey('2026-09-07')).toBe('2026-09-06');
+    expect(previousDateKey('2026-09-01')).toBe('2026-08-31');
+    expect(previousDateKey('2026-01-01')).toBe('2025-12-31');
+  });
+
+  it('keeps last-night calibration separate from weekly rewards claimed the next day', () => {
+    const settings = {
+      ...defaultSettings,
+      startDate: '2026-09-06',
+      endDate: '2026-09-07',
+      baselineTiming: 'end-of-day' as const,
+      currentPercent: 69.08,
+    };
+    const dailyIds = defaultSources
+      .filter((source) => source.frequency === 'daily')
+      .map((source) => source.id);
+    const weeklyIds = defaultSources
+      .filter((source) => source.frequency === 'weekly')
+      .map((source) => source.id);
+    const projection = projectTracker(settings, defaultSources, [
+      {
+        date: '2026-09-06',
+        completedSourceIds: dailyIds,
+        baselineIncludedSourceIds: dailyIds,
+        actualPercent: 69.08,
+      },
+      {
+        date: '2026-09-07',
+        completedSourceIds: [...dailyIds, ...weeklyIds],
+        actualPercent: null,
+      },
+    ]);
+
+    expect(projection.days[0].end.percent).toBe(69.08);
+    expect(projection.days[0].weeklyEarnedExp).toBe(0);
+    expect(projection.days[1].start.percent).toBe(69.08);
+    expect(projection.days[1].weeklyEarnedExp).toBeGreaterThan(0);
+    expect(projection.days[1].end.percent).toBeGreaterThan(69.08);
   });
 
   it('counts baseline-day tasks only when the baseline is at the start of day', () => {

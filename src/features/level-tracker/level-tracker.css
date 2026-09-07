@@ -125,6 +125,32 @@
   font-size: 13px;
   border-bottom: 1px solid #50595e;
 }
+.baseline-quick-action {
+  display: grid;
+  align-content: end;
+  gap: 8px;
+}
+.baseline-quick-action > span {
+  color: #9fa9ac;
+  font-size: 14px;
+}
+.baseline-quick-action button {
+  height: 42px;
+  border: 1px solid #f37c6d;
+  background: transparent;
+  color: #ffb2a7;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.baseline-quick-action button:hover:not(:disabled) {
+  background: rgba(243, 124, 109, 0.12);
+}
+.baseline-quick-action button:disabled {
+  border-color: #50595e;
+  color: #899296;
+  cursor: default;
+}
 .suffix-input {
   position: relative;
 }
@@ -395,6 +421,12 @@
 .day-block.calibrated .actual-input input {
   border-color: #a9cdb7;
   background: #fff;
+}
+.baseline-actual-input input {
+  border-color: #82b493;
+  background: #f0f8f2;
+  color: var(--lt-green);
+  font-weight: 800;
 }
 .day-tasks {
   padding: 17px 18px 22px;

@@ -8,6 +8,7 @@ import {
   EXP_PER_YI,
   requiredExperienceForLevel,
   projectTracker,
+  previousDateKey,
   sourceExperience,
   sourceTotals,
   weekKey,
@@ -893,6 +894,11 @@ export default function LevelTrackerPage() {
     [sources],
   );
   const targetReached = projection.final.level >= settings.targetLevel;
+  const lastNightDate = baselineDateForToday(
+    previousDateKey(localTodayKey()),
+    defaultSettings.startDate,
+    settings.endDate,
+  );
 
   const updateSetting = <K extends keyof TrackerSettings>(key: K, value: TrackerSettings[K]) => {
     setTracker((current) => ({ ...current, settings: { ...current.settings, [key]: value } }));
@@ -1161,8 +1167,8 @@ export default function LevelTrackerPage() {
                 )
               }
             >
-              <option value="start-of-day">日初 · 今日尚未计算</option>
-              <option value="end-of-day">日终 · 今日已包含</option>
+              <option value="start-of-day">该日日初 · 尚未计算任务</option>
+              <option value="end-of-day">该日日终 · 已包含当天任务</option>
             </select>
           </label>
           <label>
@@ -1222,6 +1228,18 @@ export default function LevelTrackerPage() {
               自然升级 +{settings.eventExtraLevels}级 · 共{settings.eventExtraLevels + 1}级
             </strong>
           </label>
+          <div className="baseline-quick-action">
+            <span>昨晚经验归档</span>
+            <button
+              type="button"
+              onClick={() => updateBaseline(lastNightDate, 'end-of-day')}
+              disabled={
+                settings.startDate === lastNightDate && settings.baselineTiming === 'end-of-day'
+              }
+            >
+              标记为 {formatShortDate(lastNightDate)} 日终
+            </button>
+          </div>
         </div>
         <div className="command-progress">
           <span style={{ width: `${Math.min(100, settings.currentPercent)}%` }} />
@@ -1536,11 +1554,27 @@ export default function LevelTrackerPage() {
                               <b>→ {formatProgress(day.predictedEnd)}</b>
                             </span>
                             {day.date === settings.startDate ? (
-                              <span className="baseline-label">
-                                {settings.baselineTiming === 'end-of-day'
-                                  ? '日终基准'
-                                  : '从今日开始'}
-                              </span>
+                              settings.baselineTiming === 'end-of-day' ? (
+                                <label className="actual-input baseline-actual-input">
+                                  <input
+                                    aria-label={`${formatDate(day.date)}基准日终经验百分比`}
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="0.01"
+                                    value={settings.currentPercent}
+                                    onChange={(event) =>
+                                      updateSetting(
+                                        'currentPercent',
+                                        Math.max(0, Math.min(100, Number(event.target.value) || 0)),
+                                      )
+                                    }
+                                  />
+                                  <em>%</em>
+                                </label>
+                              ) : (
+                                <span className="baseline-label">从该日日初开始</span>
+                              )
                             ) : (
                               <label className="actual-input">
                                 <input
@@ -1563,7 +1597,14 @@ export default function LevelTrackerPage() {
                               type="button"
                               onClick={() => setOpenDay(dayExpanded ? null : day.date)}
                             >
-                              {dayExpanded ? '收起' : day.calibrated ? '已校准' : '日常'}
+                              {dayExpanded
+                                ? '收起'
+                                : day.date === settings.startDate &&
+                                    settings.baselineTiming === 'end-of-day'
+                                  ? '基准'
+                                  : day.calibrated
+                                    ? '已校准'
+                                    : '日常'}
                             </button>
                           </div>
                           {dayExpanded && (
