@@ -3,80 +3,18 @@ import { sitePath } from '../../shared/lib/sitePaths';
 import CurrencyBenchmarkPanel from '../../shared/currency/CurrencyBenchmarkPanel';
 import { calculateCurrencyBenchmark } from '../../shared/currency/currencyBenchmark';
 import { useCurrencyPriceSystem } from '../../shared/currency/useCurrencyPriceSystem';
+import MoonlightShopPage from './MoonlightShopPage';
 import {
+  DEFAULT_EVENT_SHOP_RATIO,
   differenceDescription,
+  EVENT_SHOP_VERSION,
+  eventShopItems,
   prepareShopItems,
-  type ShopItem,
   type ShopSortMode,
 } from './currencyShop';
 import './currency.css';
 import './currency-theme.css';
 
-const shopItems: ShopItem[] = [
-  { name: '幸运百卷轴7%', eventCoins: 1500, crystalPrice: 359, icon: '卷' },
-  { name: '神话宝石随机礼盒', eventCoins: 20000, crystalPrice: 4273, icon: '宝' },
-  { name: '传说宝石自选礼盒', eventCoins: 5500, crystalPrice: 1134, icon: '宝' },
-  { name: '顶级宝石成长秘药', eventCoins: 800, crystalPrice: 415, crystalQuantity: 2, icon: '药' },
-  { name: '高级宝石成长秘药', eventCoins: 300, crystalPrice: 249, crystalQuantity: 3, icon: '药' },
-  { name: '神话装备图纸', eventCoins: 9000, crystalPrice: 1629, privatePrice: 1955, icon: '图' },
-  {
-    name: '闪耀的装备图纸碎片',
-    eventCoins: 2000,
-    crystalPrice: 977,
-    crystalCurrency: 'blue',
-    icon: '碎',
-  },
-  { name: '混沌升品硬币自选礼盒', eventCoins: 1000, crystalPrice: 200, icon: '盒' },
-  {
-    name: '高级道具结晶',
-    eventCoins: 800,
-    crystalPrice: 150,
-    privatePrice: 300,
-    privateQuantity: 2,
-    icon: '晶',
-  },
-  { name: '无瑕级道具结晶', eventCoins: 4500, crystalPrice: 1500, icon: '晶' },
-  {
-    name: '神秘的武器研磨石（神话）',
-    eventCoins: 2000,
-    crystalPrice: 252,
-    crystalQuantity: 3,
-    icon: '武',
-  },
-  { name: '神秘的防具研磨石（神话）', eventCoins: 1000, crystalPrice: 126, icon: '防' },
-  {
-    name: '核心宝石',
-    eventCoins: 800,
-    crystalPrice: 1111,
-    crystalQuantity: 5,
-    crystalCurrency: 'mixed',
-    icon: '核',
-  },
-  { name: '超越催化剂', eventCoins: 1000, crystalPrice: 483, crystalQuantity: 2, icon: '催' },
-  { name: '铭文痕迹', eventCoins: 8000, crystalPrice: 5503, crystalCurrency: 'blue', icon: '铭' },
-  { name: '通用防具铭文刻印卷轴', eventCoins: 50, crystalPrice: 50, icon: '卷' },
-  { name: '魔力之锤', eventCoins: 120, crystalPrice: 40, icon: '锤' },
-  { name: '可疑的金币袋子', eventCoins: 1000, crystalPrice: 120, icon: '袋' },
-  { name: '怪物乐园入场券', eventCoins: 60, crystalPrice: 33, privatePrice: 33, icon: '券' },
-  {
-    name: '神秘的武器炼成粉（神话）×10',
-    eventCoins: 130,
-    crystalPrice: 359,
-    crystalQuantity: 30,
-    crystalNote: '传说级粉末；1个传说 = 3个神器',
-    crystalComparable: false,
-    icon: '武',
-  },
-  {
-    name: '神秘的防具炼成粉（神话）×10',
-    eventCoins: 65,
-    crystalPrice: 179,
-    crystalQuantity: 30,
-    crystalNote: '传说级粉末；1个传说 = 3个神器',
-    crystalComparable: false,
-    icon: '防',
-  },
-];
 const number = (value: number, digits = 2) =>
   new Intl.NumberFormat('zh-CN', {
     maximumFractionDigits: digits,
@@ -88,10 +26,19 @@ const readRatio = (key: string, fallback: number) => {
   const value = Number(window.localStorage.getItem(key));
   return Number.isFinite(value) && value > 0 ? value : fallback;
 };
+const EVENT_SHOP_STORAGE_VERSION_KEY = 'maple-event-shop-version';
+const readCurrentEventRatio = (key: string, fallback: number) =>
+  window.localStorage.getItem(EVENT_SHOP_STORAGE_VERSION_KEY) === EVENT_SHOP_VERSION
+    ? readRatio(key, fallback)
+    : fallback;
 
 function EventShopPage() {
-  const [redDiamonds, setRedDiamonds] = useState(() => readRatio('maple-red-diamonds', 500));
-  const [eventCoins, setEventCoins] = useState(() => readRatio('maple-event-coins', 1800));
+  const [redDiamonds, setRedDiamonds] = useState(() =>
+    readCurrentEventRatio('maple-red-diamonds', DEFAULT_EVENT_SHOP_RATIO.redDiamonds),
+  );
+  const [eventCoins, setEventCoins] = useState(() =>
+    readCurrentEventRatio('maple-event-coins', DEFAULT_EVENT_SHOP_RATIO.eventCoins),
+  );
   const [sortMode, setSortMode] = useState<ShopSortMode>('difference-efficiency');
   useEffect(() => {
     window.localStorage.setItem('maple-red-diamonds', String(redDiamonds));
@@ -99,12 +46,15 @@ function EventShopPage() {
   useEffect(() => {
     window.localStorage.setItem('maple-event-coins', String(eventCoins));
   }, [eventCoins]);
+  useEffect(() => {
+    window.localStorage.setItem(EVENT_SHOP_STORAGE_VERSION_KEY, EVENT_SHOP_VERSION);
+  }, []);
   const ratio = useMemo(() => redDiamonds / eventCoins, [redDiamonds, eventCoins]);
   const rankedItems = useMemo(
-    () => prepareShopItems(shopItems, ratio, sortMode),
+    () => prepareShopItems(eventShopItems, ratio, sortMode),
     [ratio, sortMode],
   );
-  const comparableItems = shopItems.filter(
+  const comparableItems = eventShopItems.filter(
     (item) =>
       item.crystalPrice !== undefined &&
       item.crystalComparable !== false &&
@@ -143,7 +93,7 @@ function EventShopPage() {
             <br />
             <span>一眼看懂</span>
           </h1>
-          <p>输入你的兑换基准，商品会实时换算成红钻，并与水晶商店价格并排比较。</p>
+          <p>上一期活动已结束。当前展示新一期商品，并按最新兑换基准实时换算红钻价值。</p>
         </div>
         <div className="currency-orb">
           <small>1 活动币 ≈</small>
@@ -182,11 +132,11 @@ function EventShopPage() {
             className="reset-ratio"
             type="button"
             onClick={() => {
-              setRedDiamonds(500);
-              setEventCoins(1800);
+              setRedDiamonds(DEFAULT_EVENT_SHOP_RATIO.redDiamonds);
+              setEventCoins(DEFAULT_EVENT_SHOP_RATIO.eventCoins);
             }}
           >
-            恢复默认 500 : 1800
+            恢复默认 450 : 1500
           </button>
         </div>
         <div className="currency-results">
@@ -210,7 +160,9 @@ function EventShopPage() {
         </div>
       </section>
       <section className="currency-shop">
-        <div className="currency-kicker">EVENT SHOP ITEMS · {shopItems.length}</div>
+        <div className="currency-kicker">
+          EVENT SHOP ITEMS · {eventShopItems.length} · {EVENT_SHOP_VERSION}
+        </div>
         <div className="shop-heading">
           <div>
             <h2>商品价格对照</h2>
@@ -421,7 +373,7 @@ function MesoValuePage() {
 }
 
 export default function CurrencyPage() {
-  const [mode, setMode] = useState<'meso' | 'event'>('meso');
+  const [mode, setMode] = useState<'meso' | 'event' | 'moonlight'>('meso');
   return (
     <div className="currency-page-root">
       <nav className="currency-mode-tabs" aria-label="货币工具">
@@ -431,8 +383,20 @@ export default function CurrencyPage() {
         <button className={mode === 'event' ? 'active' : ''} onClick={() => setMode('event')}>
           活动币商店
         </button>
+        <button
+          className={mode === 'moonlight' ? 'active' : ''}
+          onClick={() => setMode('moonlight')}
+        >
+          月华商店
+        </button>
       </nav>
-      {mode === 'meso' ? <MesoValuePage /> : <EventShopPage />}
+      {mode === 'meso' ? (
+        <MesoValuePage />
+      ) : mode === 'event' ? (
+        <EventShopPage />
+      ) : (
+        <MoonlightShopPage />
+      )}
     </div>
   );
 }

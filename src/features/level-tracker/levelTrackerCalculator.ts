@@ -92,11 +92,19 @@ export const EXP_PER_YI = 100_000_000;
 export const defaultSources: ExperienceSource[] = [
   {
     id: 'auto-6h',
-    name: '挂机6小时',
+    name: '挂机',
     frequency: 'daily',
     exp: 36_000_000_000,
     enabled: true,
     calculation: { kind: 'per-minute', perUnitExp: 100_000_000, units: 360 },
+  },
+  {
+    id: 'training-ground-auto',
+    name: '训练场挂机',
+    frequency: 'daily',
+    exp: 0,
+    enabled: true,
+    calculation: { kind: 'per-minute', perUnitExp: 0, units: 0 },
   },
   {
     id: 'commission',

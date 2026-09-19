@@ -309,6 +309,209 @@
     margin-bottom: 18px;
   }
 }
+
+.moonlight-shell {
+  --moonlight: #89e6ff;
+  --moonlight-deep: #796cff;
+}
+.moonlight-hero h1 span {
+  background: linear-gradient(100deg, #8cecff, #9d8cff 70%);
+  background-clip: text;
+  color: transparent;
+}
+.moonlight-orb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid rgba(137, 230, 255, 0.24);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 36% 28%, rgba(255, 255, 255, 0.22), transparent 16%),
+    radial-gradient(circle, rgba(105, 191, 255, 0.24), rgba(104, 80, 213, 0.08) 62%, transparent 63%);
+  box-shadow:
+    inset 0 0 70px rgba(155, 130, 255, 0.13),
+    0 24px 80px rgba(34, 50, 115, 0.3);
+}
+.moonlight-orb::after {
+  position: absolute;
+  inset: 12%;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 50%;
+  content: '';
+}
+.moonlight-orb .moonlight-mark {
+  position: absolute;
+  top: 15%;
+  color: var(--moonlight);
+  font-size: 54px;
+  filter: drop-shadow(0 0 18px rgba(137, 230, 255, 0.55));
+}
+.moonlight-orb strong {
+  margin-top: 34px;
+  color: #fff;
+  font-size: 78px;
+  line-height: 1;
+}
+.moonlight-orb small {
+  margin-top: -54px;
+  color: #b9c8e7;
+}
+.moonlight-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.moonlight-summary article {
+  display: grid;
+  gap: 10px;
+  min-height: 124px;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025));
+}
+.moonlight-summary small,
+.moonlight-summary span {
+  color: #8994a9;
+}
+.moonlight-summary strong {
+  color: #fff;
+  font-size: 18px;
+}
+.moonlight-summary span {
+  font-size: 13px;
+}
+.moonlight-list-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 90% 10%, rgba(117, 104, 255, 0.13), transparent 34%),
+    rgba(255, 255, 255, 0.05);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.14);
+}
+.moonlight-list {
+  min-width: 920px;
+}
+.moonlight-list-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.6fr) 0.75fr 0.7fr 0.7fr 0.65fr 0.9fr;
+  gap: 16px;
+  align-items: center;
+  min-height: 88px;
+  padding: 0 22px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.moonlight-list-row:last-child {
+  border-bottom: 0;
+}
+.moonlight-list-head {
+  min-height: 48px;
+  background: rgba(4, 8, 17, 0.38);
+  color: #7f8aa0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.moonlight-list-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.moonlight-item-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  border: 1px solid rgba(160, 225, 255, 0.22);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(139, 231, 255, 0.2), rgba(119, 96, 255, 0.15));
+  color: #e9fbff;
+  font-size: 19px;
+  font-weight: 900;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.15);
+}
+.moonlight-list-item h3 {
+  margin: 0 0 5px;
+  color: #fff;
+  font-size: 15px;
+}
+.moonlight-list-item small {
+  color: #78dbb0;
+  font-size: 11px;
+}
+.moonlight-limit-cell {
+  color: #9eeaff;
+  font-size: 13px;
+}
+.moonlight-diamond-cell {
+  color: #647086;
+}
+.moonlight-diamond-cell strong {
+  display: block;
+  font-size: 17px;
+}
+.moonlight-diamond-cell.red strong {
+  color: #ff9caf;
+}
+.moonlight-diamond-cell.blue strong {
+  color: #87caff;
+}
+.moonlight-diamond-cell del {
+  display: block;
+  margin-top: 3px;
+  color: #697387;
+  font-size: 11px;
+}
+.moonlight-price-cell {
+  color: #fff;
+  font-size: 20px;
+}
+.moonlight-token {
+  display: inline-grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #9df9ff, #6a58ff);
+  color: white;
+  font-size: 14px;
+  font-style: normal;
+  vertical-align: 2px;
+  box-shadow: 0 0 12px rgba(111, 126, 255, 0.55);
+}
+.moonlight-value-cell {
+  display: grid;
+  gap: 3px;
+}
+.moonlight-value-cell strong {
+  color: #fff4cb;
+  font-size: 15px;
+}
+.moonlight-value-cell small {
+  color: #7f8aa0;
+  font-size: 11px;
+}
+@media (max-width: 760px) {
+  .currency-mode-tabs {
+    width: calc(100% - 24px);
+  }
+  .currency-mode-tabs button {
+    flex: 1;
+    padding-inline: 10px;
+  }
+  .moonlight-summary {
+    grid-template-columns: 1fr;
+  }
+  .moonlight-list-wrap {
+    margin-inline: -12px;
+    border-radius: 16px;
+  }
+}
 .currency-row {
   grid-template-columns: 1.25fr 0.65fr 0.75fr 0.85fr 0.6fr 0.6fr;
 }

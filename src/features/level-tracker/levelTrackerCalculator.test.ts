@@ -25,8 +25,24 @@ describe('level tracker calculator', () => {
 
   it('derives挂机 and monster park experience from their input parameters', () => {
     const idle = defaultSources.find((source) => source.id === 'auto-6h')!;
+    const trainingGround = defaultSources.find(
+      (source) => source.id === 'training-ground-auto',
+    )!;
     const monsterPark = defaultSources.find((source) => source.id === 'monster-park')!;
     expect(sourceExperience(idle) / EXP_PER_YI).toBeCloseTo(360, 3);
+    expect(
+      sourceExperience({
+        ...idle,
+        calculation: { kind: 'per-minute', perUnitExp: EXP_PER_YI, units: 125 },
+      }) / EXP_PER_YI,
+    ).toBe(125);
+    expect(sourceExperience(trainingGround)).toBe(0);
+    expect(
+      sourceExperience({
+        ...trainingGround,
+        calculation: { kind: 'per-minute', perUnitExp: 50_000_000, units: 90 },
+      }),
+    ).toBe(4_500_000_000);
     expect(sourceExperience(monsterPark)).toBeCloseTo(24_954_938_331, 2);
     const boosted = {
       ...monsterPark,

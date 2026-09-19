@@ -6,7 +6,6 @@ import {
   defaultSettings,
   defaultSources,
   EXP_PER_YI,
-  requiredExperienceForLevel,
   projectTracker,
   previousDateKey,
   sourceExperience,
@@ -18,11 +17,9 @@ import {
   type TrackerSettings,
 } from './levelTrackerCalculator';
 import {
-  hydrateLevelRequirements,
   LEVEL_EXPERIENCE_VERSION,
   referenceLevelRequirements,
 } from './levelExperienceData';
-import LevelExperienceTable from './LevelExperienceTable';
 import './level-tracker.css';
 
 interface StoredTracker {
@@ -31,6 +28,25 @@ interface StoredTracker {
   records: DailyRecord[];
 }
 
+interface CharacterProfile {
+  id: string;
+  name: string;
+  tracker: StoredTracker;
+}
+
+interface StoredCharacterCollection {
+  activeCharacterId: string;
+  characters: CharacterProfile[];
+}
+
+interface LevelTrackerBackup {
+  format: 'maplelab-level-tracker-backup';
+  version: 1;
+  exportedAt: string;
+  data: StoredCharacterCollection;
+}
+
+const CHARACTER_STORAGE_KEY = 'maplelab-level-tracker-characters-v1';
 const STORAGE_KEY = 'maplelab-level-tracker-v11';
 const PREVIOUS_STORAGE_KEY = 'maplelab-level-tracker-v10';
 const BASELINE_STORAGE_KEY = 'maplelab-level-tracker-v9';
@@ -43,18 +59,20 @@ const localTodayKey = () => {
   const day = String(today.getDate()).padStart(2, '0');
   return `${today.getFullYear()}-${month}-${day}`;
 };
+const addDaysToDateKey = (date: string, days: number) => {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+};
+const safeFileNamePart = (value: string) =>
+  value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/[. ]+$/g, '').trim() || '未命名角色';
 const defaultBaseline = () => {
-  const startDate = baselineDateForToday(
-    localTodayKey(),
-    defaultSettings.startDate,
-    defaultSettings.endDate,
-  );
+  const today = localTodayKey();
+  const startDate = today < defaultSettings.startDate ? defaultSettings.startDate : today;
   return {
     startDate,
-    baselineTiming:
-      startDate === defaultSettings.startDate
-        ? defaultSettings.baselineTiming
-        : ('start-of-day' as const),
+    endDate: addDaysToDateKey(startDate, 21),
+    baselineTiming: 'start-of-day' as const,
   };
 };
 const cloneDefaults = (): StoredTracker => {
@@ -70,16 +88,19 @@ const hydrateSettings = (settings: TrackerSettings): TrackerSettings => ({
   ...defaultSettings,
   ...settings,
   requiredExp: defaultSettings.requiredExp,
-  levelRequirements: hydrateLevelRequirements(
-    settings.levelRequirements,
-    settings.levelRequirementsVersion,
-  ),
+  levelRequirements: { ...referenceLevelRequirements },
   levelRequirementsVersion: LEVEL_EXPERIENCE_VERSION,
 });
 const hydrateSources = (storedSources: ExperienceSource[]) => {
   const stored = new Map(storedSources.map((source) => [source.id, source]));
   return defaultSources.map((source) =>
-    stored.has(source.id) ? { ...source, ...stored.get(source.id) } : { ...source },
+    stored.has(source.id)
+      ? {
+          ...source,
+          ...stored.get(source.id),
+          name: source.id === 'auto-6h' ? source.name : stored.get(source.id)?.name ?? source.name,
+        }
+      : { ...source },
   );
 };
 const migrateLegacySources = (storedSources: ExperienceSource[]) => {
@@ -115,6 +136,11 @@ const hydrateRecords = (
     monsterPark?.calculation?.kind === 'per-ticket'
       ? monsterPark.calculation.perUnitExp * (1 + monsterPark.calculation.bonusPercent / 100)
       : 0;
+  const idleSource = sources.find(
+    (source) => source.id === 'auto-6h' && source.calculation?.kind === 'per-minute',
+  );
+  const idlePerMinuteExp =
+    idleSource?.calculation?.kind === 'per-minute' ? idleSource.calculation.perUnitExp : 0;
   const firstWeek = weekKey(settings.startDate);
   const firstWeekRecords = records.filter((record) => weekKey(record.date) === firstWeek);
   const firstWeekLastDate = firstWeekRecords.at(-1)?.date ?? settings.startDate;
@@ -136,6 +162,18 @@ const hydrateRecords = (
     let baselineIncludedSourceIds = record.baselineIncludedSourceIds;
     let sourceExpOverrides = record.sourceExpOverrides;
     let sourceUnitOverrides = record.sourceUnitOverrides;
+    if (
+      sourceExpOverrides?.['auto-6h'] !== undefined &&
+      sourceUnitOverrides?.['auto-6h'] === undefined &&
+      idlePerMinuteExp > 0
+    ) {
+      sourceUnitOverrides = {
+        ...sourceUnitOverrides,
+        'auto-6h': Math.max(0, Math.round(sourceExpOverrides['auto-6h'] / idlePerMinuteExp)),
+      };
+      sourceExpOverrides = { ...sourceExpOverrides };
+      delete sourceExpOverrides['auto-6h'];
+    }
     if (
       sourceExpOverrides?.['monster-park'] !== undefined &&
       sourceUnitOverrides?.['monster-park'] === undefined &&
@@ -260,6 +298,40 @@ const rebaseRecords = (
   });
   return hydrateRecords(nextSettings, sources, rebased);
 };
+const resizeRecords = (
+  settings: TrackerSettings,
+  sources: ExperienceSource[],
+  records: DailyRecord[],
+  endDate: string,
+) => {
+  const nextSettings = { ...settings, endDate };
+  const defaults = createDefaultRecords(nextSettings, sources);
+  const existingByDate = new Map(records.map((record) => [record.date, record]));
+  const weeklyIds = new Set(
+    sources.filter((source) => source.frequency === 'weekly').map((source) => source.id),
+  );
+  const scheduledByWeek = new Map<string, Set<string>>();
+  records
+    .filter((record) => record.date >= settings.startDate && record.date <= endDate)
+    .forEach((record) => {
+      const key = weekKey(record.date);
+      const scheduled = scheduledByWeek.get(key) ?? new Set<string>();
+      record.completedSourceIds.filter((id) => weeklyIds.has(id)).forEach((id) => scheduled.add(id));
+      scheduledByWeek.set(key, scheduled);
+    });
+
+  return defaults.map((record) => {
+    const existing = existingByDate.get(record.date);
+    if (existing) return existing;
+    const scheduled = scheduledByWeek.get(weekKey(record.date)) ?? new Set<string>();
+    return {
+      ...record,
+      completedSourceIds: record.completedSourceIds.filter(
+        (id) => !weeklyIds.has(id) || !scheduled.has(id),
+      ),
+    };
+  });
+};
 const addDefaultWeeklyPurchases = (
   settings: TrackerSettings,
   sources: ExperienceSource[],
@@ -377,6 +449,56 @@ function loadTracker(): StoredTracker {
   }
 }
 
+const createCharacterId = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `character-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const hydrateStoredTracker = (tracker: StoredTracker): StoredTracker => {
+  const settings = hydrateSettings(tracker.settings);
+  const sources = hydrateSources(tracker.sources);
+  return {
+    settings,
+    sources,
+    records: hydrateRecords(settings, sources, tracker.records),
+  };
+};
+
+function loadCharacterCollection(): StoredCharacterCollection {
+  try {
+    const saved = window.localStorage.getItem(CHARACTER_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved) as StoredCharacterCollection;
+      const characters = Array.isArray(parsed.characters)
+        ? parsed.characters
+            .filter(
+              (profile) =>
+                profile?.id &&
+                profile?.name &&
+                profile.tracker?.settings &&
+                Array.isArray(profile.tracker.sources) &&
+                Array.isArray(profile.tracker.records),
+            )
+            .map((profile) => ({ ...profile, tracker: hydrateStoredTracker(profile.tracker) }))
+        : [];
+      if (characters.length > 0) {
+        return {
+          activeCharacterId: characters.some(
+            (profile) => profile.id === parsed.activeCharacterId,
+          )
+            ? parsed.activeCharacterId
+            : characters[0].id,
+          characters,
+        };
+      }
+    }
+  } catch {
+    // Fall through and migrate the previous single-character storage.
+  }
+  const profile = { id: createCharacterId(), name: '角色 1', tracker: loadTracker() };
+  return { activeCharacterId: profile.id, characters: [profile] };
+}
+
 const formatDate = (date: string) => {
   const [, month, day] = date.split('-');
   return `${Number(month)}月${Number(day)}日`;
@@ -390,7 +512,9 @@ const formatExp = (exp: number) =>
 const formatYiExp = (exp: number) =>
   `${(exp / EXP_PER_YI).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 亿`;
 const sourceDisplayName = (source: ExperienceSource) =>
-  source.calculation?.kind === 'per-run' || source.calculation?.kind === 'per-ticket'
+  source.calculation?.kind === 'per-minute'
+    ? `${source.name} ×${source.calculation.units}分钟`
+    : source.calculation?.kind === 'per-run' || source.calculation?.kind === 'per-ticket'
     ? `${source.name} ×${source.calculation.units}`
     : source.name;
 const purchaseLabel = (source: ExperienceSource) =>
@@ -432,20 +556,16 @@ function TaskCheck({
 function DailyTaskList({
   sources,
   completedIds,
-  expOverrides,
   unitOverrides,
   allowExpOverride,
   onToggle,
-  onExpOverride,
   onUnitOverride,
 }: {
   sources: ExperienceSource[];
   completedIds: string[];
-  expOverrides?: Record<string, number>;
   unitOverrides?: Record<string, number>;
   allowExpOverride: boolean;
   onToggle: (source: ExperienceSource) => void;
-  onExpOverride: (source: ExperienceSource, value: string) => void;
   onUnitOverride: (source: ExperienceSource, value: string) => void;
 }) {
   const daily = sources.filter((source) => source.frequency === 'daily');
@@ -497,33 +617,42 @@ function DailyTaskList({
               </div>
             );
           }
-          return source.id === 'auto-6h' ? (
-            <div
-              className={`daily-exp-override ${expOverrides?.[source.id] !== undefined ? 'customized' : ''}`}
-              key={source.id}
-            >
-              <TaskCheck
-                source={source}
-                checked={isChecked(source)}
-                onToggle={() => onToggle(source)}
-              />
-              <span className="today-exp-input">
-                <small>{allowExpOverride ? '今日挂机经验' : '已计入基准'}</small>
-                <span>
-                  <input
-                    aria-label="今日挂机经验"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    disabled={!isChecked(source) || !allowExpOverride}
-                    value={(expOverrides?.[source.id] ?? sourceExperience(source)) / EXP_PER_YI}
-                    onChange={(event) => onExpOverride(source, event.target.value)}
-                  />
-                  <em>亿</em>
+          if (source.calculation?.kind === 'per-minute') {
+            const units = unitOverrides?.[source.id] ?? source.calculation.units;
+            const dailySource = { ...source, calculation: { ...source.calculation, units } };
+            return (
+              <div
+                className={`daily-exp-override ${unitOverrides?.[source.id] !== undefined ? 'customized' : ''}`}
+                key={source.id}
+              >
+                <TaskCheck
+                  source={dailySource}
+                  checked={isChecked(source)}
+                  onToggle={() => onToggle(source)}
+                />
+                <span className="today-exp-input">
+                  <small>
+                    {allowExpOverride
+                      ? `今日 ${formatExp(sourceExperience(dailySource))}`
+                      : '已计入基准'}
+                  </small>
+                  <span>
+                    <input
+                      aria-label={`今日${source.name}分钟数`}
+                      type="number"
+                      min="0"
+                      step="1"
+                      disabled={!isChecked(source) || !allowExpOverride}
+                      value={units}
+                      onChange={(event) => onUnitOverride(source, event.target.value)}
+                    />
+                    <em>分钟</em>
+                  </span>
                 </span>
-              </span>
-            </div>
-          ) : (
+              </div>
+            );
+          }
+          return (
             <TaskCheck
               key={source.id}
               source={source}
@@ -741,7 +870,24 @@ function SourceParameterEditor({
             }
           />
         </label>
-        <b>× {source.calculation.units} 分钟</b>
+        <label className="small-formula">
+          <span>挂机分钟数</span>
+          <input
+            aria-label={`${source.name}分钟数`}
+            type="number"
+            min="0"
+            step="1"
+            value={source.calculation.units}
+            onChange={(event) =>
+              onChange({
+                calculation: {
+                  ...source.calculation!,
+                  units: Math.max(0, Math.floor(Number(event.target.value) || 0)),
+                } as ExperienceSource['calculation'],
+              })
+            }
+          />
+        </label>
       </div>
     );
   }
@@ -867,7 +1013,26 @@ function SourceParameterEditor({
 }
 
 export default function LevelTrackerPage() {
-  const [tracker, setTracker] = useState<StoredTracker>(loadTracker);
+  const [characterCollection, setCharacterCollection] =
+    useState<StoredCharacterCollection>(loadCharacterCollection);
+  const activeCharacter =
+    characterCollection.characters.find(
+      (profile) => profile.id === characterCollection.activeCharacterId,
+    ) ?? characterCollection.characters[0];
+  const tracker = activeCharacter.tracker;
+  const setTracker = (
+    updater: StoredTracker | ((current: StoredTracker) => StoredTracker),
+  ) => {
+    setCharacterCollection((current) => ({
+      ...current,
+      characters: current.characters.map((profile) => {
+        if (profile.id !== current.activeCharacterId) return profile;
+        const nextTracker =
+          typeof updater === 'function' ? updater(profile.tracker) : updater;
+        return { ...profile, tracker: nextTracker };
+      }),
+    }));
+  };
   const [draftSources, setDraftSources] = useState<ExperienceSource[]>(() =>
     tracker.sources.map((source) => ({ ...source })),
   );
@@ -880,8 +1045,8 @@ export default function LevelTrackerPage() {
   const { settings, sources, records } = tracker;
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(tracker));
-  }, [tracker]);
+    window.localStorage.setItem(CHARACTER_STORAGE_KEY, JSON.stringify(characterCollection));
+  }, [characterCollection]);
 
   const projection = useMemo(
     () => projectTracker(settings, sources, records),
@@ -893,45 +1058,124 @@ export default function LevelTrackerPage() {
     () => new Set(sources.filter((source) => source.enabled).map((source) => source.id)),
     [sources],
   );
-  const targetReached = projection.final.level >= settings.targetLevel;
   const lastNightDate = baselineDateForToday(
     previousDateKey(localTodayKey()),
-    defaultSettings.startDate,
+    settings.startDate,
     settings.endDate,
   );
+
+  const activateCharacter = (id: string) => {
+    const profile = characterCollection.characters.find((item) => item.id === id);
+    if (!profile || profile.id === characterCollection.activeCharacterId) return;
+    setCharacterCollection((current) => ({ ...current, activeCharacterId: id }));
+    setDraftSources(profile.tracker.sources.map((source) => ({ ...source })));
+    setSourcesDirty(false);
+    setOpenWeek(weekKey(profile.tracker.settings.startDate));
+    setOpenDay(profile.tracker.settings.startDate);
+  };
+
+  const addCharacter = () => {
+    const suggestedName = `角色 ${characterCollection.characters.length + 1}`;
+    const name = window.prompt('请输入角色名称或职业', suggestedName)?.trim();
+    if (!name) return;
+    const profile = { id: createCharacterId(), name, tracker: cloneDefaults() };
+    setCharacterCollection((current) => ({
+      activeCharacterId: profile.id,
+      characters: [...current.characters, profile],
+    }));
+    setDraftSources(profile.tracker.sources.map((source) => ({ ...source })));
+    setSourcesDirty(false);
+    setOpenWeek(weekKey(profile.tracker.settings.startDate));
+    setOpenDay(profile.tracker.settings.startDate);
+  };
+
+  const renameCharacter = () => {
+    const name = window.prompt('修改角色名称或职业', activeCharacter.name)?.trim();
+    if (!name || name === activeCharacter.name) return;
+    setCharacterCollection((current) => ({
+      ...current,
+      characters: current.characters.map((profile) =>
+        profile.id === current.activeCharacterId ? { ...profile, name } : profile,
+      ),
+    }));
+  };
+
+  const deleteCharacter = () => {
+    if (characterCollection.characters.length === 1) {
+      window.alert('至少需要保留一个角色。');
+      return;
+    }
+    if (!window.confirm(`确定删除“${activeCharacter.name}”及其全部等级记录吗？`)) return;
+    const remaining = characterCollection.characters.filter(
+      (profile) => profile.id !== activeCharacter.id,
+    );
+    const next = remaining[0];
+    setCharacterCollection({ activeCharacterId: next.id, characters: remaining });
+    setDraftSources(next.tracker.sources.map((source) => ({ ...source })));
+    setSourcesDirty(false);
+    setOpenWeek(weekKey(next.tracker.settings.startDate));
+    setOpenDay(next.tracker.settings.startDate);
+  };
+
+  const exportBackup = () => {
+    const backup: LevelTrackerBackup = {
+      format: 'maplelab-level-tracker-backup',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      data: characterCollection,
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], {
+      type: 'application/json;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `maplelab-level-tracker-${safeFileNamePart(activeCharacter.name)}-${localTodayKey()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
 
   const updateSetting = <K extends keyof TrackerSettings>(key: K, value: TrackerSettings[K]) => {
     setTracker((current) => ({ ...current, settings: { ...current.settings, [key]: value } }));
   };
   const updateBaseline = (startDate: string, baselineTiming: TrackerSettings['baselineTiming']) => {
-    if (!startDate || startDate > settings.endDate) return;
-    setTracker((current) => ({
-      ...current,
-      settings: { ...current.settings, startDate, baselineTiming },
-      records: rebaseRecords(
-        current.settings,
-        current.sources,
-        current.records,
-        startDate,
-        baselineTiming,
-      ),
-    }));
+    if (!startDate) return;
+    setTracker((current) => {
+      const endDate = startDate > current.settings.endDate ? startDate : current.settings.endDate;
+      const settingsWithEndDate = { ...current.settings, endDate };
+      const recordsWithEndDate =
+        endDate === current.settings.endDate
+          ? current.records
+          : resizeRecords(current.settings, current.sources, current.records, endDate);
+      return {
+        ...current,
+        settings: { ...settingsWithEndDate, startDate, baselineTiming },
+        records: rebaseRecords(
+          settingsWithEndDate,
+          current.sources,
+          recordsWithEndDate,
+          startDate,
+          baselineTiming,
+        ),
+      };
+    });
     setOpenWeek(weekKey(startDate));
     setOpenDay(startDate);
   };
-  const updateLevelRequirement = (level: number, value: string) => {
+  const updateEndDate = (endDate: string) => {
+    if (!endDate || endDate < settings.startDate) return;
     setTracker((current) => ({
       ...current,
-      settings: {
-        ...current.settings,
-        levelRequirements: {
-          ...current.settings.levelRequirements,
-          [level]: Math.max(1, Number(value) || 1),
-        },
-      },
+      settings: { ...current.settings, endDate },
+      records: resizeRecords(current.settings, current.sources, current.records, endDate),
     }));
+    if ((openDay && openDay > endDate) || (openWeek && openWeek > weekKey(endDate))) {
+      setOpenWeek(weekKey(endDate));
+      setOpenDay(endDate);
+    }
   };
-
   const updateSource = (id: string, patch: Partial<ExperienceSource>) => {
     setDraftSources((current) =>
       current.map((source) => (source.id === id ? { ...source, ...patch } : source)),
@@ -1052,18 +1296,6 @@ export default function LevelTrackerPage() {
       ),
     }));
   };
-  const updateDailySourceExperience = (date: string, source: ExperienceSource, value: string) => {
-    setTracker((current) => ({
-      ...current,
-      records: current.records.map((record) => {
-        if (record.date !== date) return record;
-        const sourceExpOverrides = { ...(record.sourceExpOverrides ?? {}) };
-        if (value === '') delete sourceExpOverrides[source.id];
-        else sourceExpOverrides[source.id] = Math.max(0, Number(value) || 0) * EXP_PER_YI;
-        return { ...record, sourceExpOverrides };
-      }),
-    }));
-  };
   const updateDailySourceUnits = (date: string, source: ExperienceSource, value: string) => {
     setTracker((current) => ({
       ...current,
@@ -1096,7 +1328,7 @@ export default function LevelTrackerPage() {
     {
       key: 'daily',
       label: '日常任务',
-      note: '单次经验 × 每日次数',
+      note: '经验参数 × 次数 / 分钟数',
       items: draftSources.filter((source) => source.frequency === 'daily'),
     },
     {
@@ -1122,18 +1354,51 @@ export default function LevelTrackerPage() {
         <div className="tracker-heading">
           <span className="tracker-eyebrow">PROGRESSION / DAILY FORECAST</span>
           <h1>等级跟踪器</h1>
-          <p>从当前经验基准出发，自动忽略更早日期并预测到 {formatDate(settings.endDate)}。</p>
+          <p>从任意当前等级和经验基准出发，按你选择的终止日期持续预测。</p>
         </div>
         <a className="tracker-back" href={sitePath('/')}>
           返回工具目录 ↗
         </a>
       </header>
 
+      <section className="character-switcher" aria-label="角色管理">
+        <label>
+          <span>当前角色</span>
+          <select
+            value={activeCharacter.id}
+            onChange={(event) => activateCharacter(event.target.value)}
+          >
+            {characterCollection.characters.map((profile) => (
+              <option value={profile.id} key={profile.id}>
+                {profile.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p>
+          每个角色分别保存等级、日期、任务配置和每日记录，共{' '}
+          {characterCollection.characters.length} 个角色。
+        </p>
+        <div>
+          <button type="button" onClick={addCharacter}>新增角色</button>
+          <button type="button" onClick={renameCharacter}>重命名</button>
+          <button type="button" onClick={exportBackup}>导出备份</button>
+          <button
+            className="danger"
+            type="button"
+            onClick={deleteCharacter}
+            disabled={characterCollection.characters.length === 1}
+          >
+            删除角色
+          </button>
+        </div>
+      </section>
+
       <section className="tracker-command">
         <div className="command-copy">
-          <span className="tracker-eyebrow">
-            CURRENT BASELINE / {formatShortDate(settings.startDate)}{' '}
-            {settings.baselineTiming === 'end-of-day' ? 'END OF DAY' : 'START OF DAY'}
+          <span className="tracker-eyebrow baseline-heading">
+            当前经验基准 · {formatDate(settings.startDate)} ·{' '}
+            {settings.baselineTiming === 'end-of-day' ? '日终' : '日初'}
           </span>
           <h2>
             {formatProgress({ level: settings.currentLevel, percent: settings.currentPercent })}
@@ -1150,8 +1415,6 @@ export default function LevelTrackerPage() {
             <span>当前数据日期</span>
             <input
               type="date"
-              min={defaultSettings.startDate}
-              max={settings.endDate}
               value={settings.startDate}
               onChange={(event) => updateBaseline(event.target.value, settings.baselineTiming)}
             />
@@ -1172,13 +1435,17 @@ export default function LevelTrackerPage() {
             </select>
           </label>
           <label>
-            <span>当前等级</span>
+            <span>当前等级（199–250）</span>
             <input
               type="number"
-              min="1"
+              min="199"
+              max="250"
               value={settings.currentLevel}
               onChange={(event) =>
-                updateSetting('currentLevel', Math.max(1, Number(event.target.value) || 1))
+                updateSetting(
+                  'currentLevel',
+                  Math.max(199, Math.min(250, Number(event.target.value) || 199)),
+                )
               }
             />
           </label>
@@ -1201,27 +1468,15 @@ export default function LevelTrackerPage() {
               <em>%</em>
             </span>
           </label>
-          {[0, 1, 2]
-            .map((step) => settings.currentLevel + step * (settings.eventExtraLevels + 1))
-            .map((level) => (
-              <label className="requirement-field" key={level}>
-                <span>{level}级升级经验</span>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={requiredExperienceForLevel(settings, level)}
-                  onChange={(event) => updateLevelRequirement(level, event.target.value)}
-                />
-                <small>
-                  {formatYiExp(requiredExperienceForLevel(settings, level))}
-                  {!settings.levelRequirements[String(level)] &&
-                  !referenceLevelRequirements[String(level)]
-                    ? ' · 缺少数据，暂用邻近等级估算'
-                    : ''}
-                </small>
-              </label>
-            ))}
+          <label>
+            <span>预测终止日期</span>
+            <input
+              type="date"
+              min={settings.startDate}
+              value={settings.endDate}
+              onChange={(event) => updateEndDate(event.target.value)}
+            />
+          </label>
           <label>
             <span>升级活动</span>
             <strong>
@@ -1246,15 +1501,11 @@ export default function LevelTrackerPage() {
         </div>
       </section>
 
-      <section className={`final-forecast ${targetReached ? 'reached' : 'short'}`}>
+      <section className="final-forecast reached">
         <div>
           <span className="tracker-eyebrow">FINAL / {settings.endDate.replaceAll('-', '.')}</span>
           <h2>{formatProgress(projection.final)}</h2>
-          <p>
-            {targetReached
-              ? `预计 ${formatDate(projection.reachedTargetDate ?? settings.endDate)} 达到 Lv.${settings.targetLevel}`
-              : `按当前计划尚未达到 Lv.${settings.targetLevel}`}
-          </p>
+          <p>预计截至 {formatDate(settings.endDate)} 的等级与经验进度</p>
         </div>
         <dl>
           <div>
@@ -1262,8 +1513,8 @@ export default function LevelTrackerPage() {
             <dd>{formatExp(projection.totalEarnedExp)}</dd>
           </div>
           <div>
-            <dt>{targetReached ? '206级经验余量' : '距离升级缺口'}</dt>
-            <dd>{formatExp(Math.abs(projection.targetDeltaExp))}</dd>
+            <dt>预计等级提升</dt>
+            <dd>+{Math.max(0, projection.final.level - settings.currentLevel)} 级</dd>
           </div>
           <div>
             <dt>日常 / 周常</dt>
@@ -1274,34 +1525,11 @@ export default function LevelTrackerPage() {
         </dl>
       </section>
 
-      {!settings.levelRequirements[String(projection.final.level)] && (
-        <p role="status">
-          预测已超出已录入的等级经验范围，缺失等级暂沿用邻近等级经验，结果仅供估算。可在顶部填写对应等级的升级经验。
+      {projection.final.level > 251 && (
+        <p className="level-range-notice" role="status">
+          当前内置经验表支持 199–250 级（含 250→251）；超出部分暂按 250 级经验估算。
         </p>
       )}
-      <LevelExperienceTable
-        requirements={settings.levelRequirements}
-        onChange={updateLevelRequirement}
-        onUseReference={() => {
-          if (
-            !window.confirm(
-              '将 199–250 级的升级经验替换为图片参考值？此操作不会清除任务和每日校准记录。',
-            )
-          )
-            return;
-          setTracker((current) => ({
-            ...current,
-            settings: {
-              ...current.settings,
-              levelRequirements: {
-                ...current.settings.levelRequirements,
-                ...referenceLevelRequirements,
-              },
-              levelRequirementsVersion: LEVEL_EXPERIENCE_VERSION,
-            },
-          }));
-        }}
-      />
 
       <section className="source-editor">
         <button
@@ -1624,16 +1852,12 @@ export default function LevelTrackerPage() {
                               <DailyTaskList
                                 sources={sources.filter((source) => source.enabled)}
                                 completedIds={record.completedSourceIds}
-                                expOverrides={record.sourceExpOverrides}
                                 unitOverrides={record.sourceUnitOverrides}
                                 allowExpOverride={
                                   day.date !== settings.startDate ||
                                   settings.baselineTiming === 'start-of-day'
                                 }
                                 onToggle={(source) => toggleTask(day.date, source)}
-                                onExpOverride={(source, value) =>
-                                  updateDailySourceExperience(day.date, source, value)
-                                }
                                 onUnitOverride={(source, value) =>
                                   updateDailySourceUnits(day.date, source, value)
                                 }
@@ -1654,9 +1878,9 @@ export default function LevelTrackerPage() {
       <footer className="tracker-footer">
         <span>BASELINE / {settings.startDate.replaceAll('-', '.')}</span>
         <button type="button" onClick={resetTracker}>
-          恢复默认数据
+          恢复当前角色默认数据
         </button>
-        <span>经验单位：亿 / 万亿 · 数据保存在当前浏览器</span>
+        <span>经验单位：亿 / 万亿 · {activeCharacter.name}的数据保存在当前浏览器</span>
       </footer>
     </main>
   );
