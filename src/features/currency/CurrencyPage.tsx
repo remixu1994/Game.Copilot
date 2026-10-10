@@ -12,6 +12,7 @@ import {
   prepareShopItems,
   type ShopSortMode,
 } from './currencyShop';
+import { calculateGameGoldComparisons } from './gameGoldComparison';
 import './currency.css';
 import './currency-theme.css';
 
@@ -286,6 +287,7 @@ function MesoValuePage() {
     () => calculateCurrencyBenchmark(benchmark, crystalPackage),
     [benchmark, crystalPackage],
   );
+  const gameGoldComparisons = useMemo(() => calculateGameGoldComparisons(metrics), [metrics]);
   return (
     <main className="currency-shell">
       <header className="currency-header">
@@ -347,7 +349,36 @@ function MesoValuePage() {
             <span>物品</span>
             <span>商店价格</span>
             <span>RMB 估价</span>
-            <span>每小时成本</span>
+            <span>单位成本</span>
+          </div>
+          <div className="currency-row currency-row-group">
+            <strong>游戏金币渠道</strong>
+            <span>统一按 1 亿游戏币成本升序</span>
+          </div>
+          {gameGoldComparisons.map((item, index) => (
+            <div
+              className={`currency-row game-gold-row${index === 0 ? ' best-value' : ''}`}
+              key={item.id}
+            >
+              <span>
+                <i className={`currency-token ${item.payment.currency}`} />
+                {item.name}
+                {index === 0 && <small className="best-value-badge">最低</small>}
+              </span>
+              <span>
+                {integer(item.payment.amount)}{' '}
+                {item.payment.currency === 'meso' ? '枫币' : '红水晶'}
+                <small className="price-note">换取 {integer(item.gameGold)} 游戏币</small>
+              </span>
+              <strong>{number(item.totalRmb)} 元</strong>
+              <span className="game-gold-unit-cost">
+                1 亿 ≈ <b>{number(item.rmbPerHundredMillion)} 元</b>
+              </span>
+            </div>
+          ))}
+          <div className="currency-row currency-row-group">
+            <strong>常见物品</strong>
+            <span>按当前统一价格基准估算</span>
           </div>
           {mesoReferenceItems.map(([name, type, price, hours]) => {
             const value =

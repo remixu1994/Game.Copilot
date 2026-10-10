@@ -593,11 +593,42 @@
 .meso-reference-table .currency-row strong {
   font-size: 20px;
 }
+.meso-reference-table .currency-row-group {
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  padding-top: 22px;
+  padding-bottom: 10px;
+  color: #8994a9;
+}
+.meso-reference-table .currency-row-group strong {
+  color: #f4c75b;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+}
+.game-gold-row.best-value {
+  border-color: rgba(244, 199, 91, 0.38);
+  background: rgba(244, 199, 91, 0.06);
+}
+.best-value-badge {
+  margin-left: 8px;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: #f4c75b;
+  color: #141a28;
+  font-size: 14px;
+  font-weight: 800;
+}
+.game-gold-unit-cost b {
+  color: #f4c75b;
+}
 @media (max-width: 760px) {
   .currency-mode-tabs {
     top: 12px;
   }
   .meso-reference-table .currency-row {
+    grid-template-columns: 1fr;
+  }
+  .meso-reference-table .currency-row-group {
     grid-template-columns: 1fr;
   }
 }

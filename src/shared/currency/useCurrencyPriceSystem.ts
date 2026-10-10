@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   BEST_VALUE_CRYSTAL_PACKAGE,
   DEFAULT_CURRENCY_BENCHMARK,
+  migrateCurrencyBenchmark,
   type CrystalPackage,
   type CurrencyBenchmarkInput,
 } from './currencyBenchmark';
@@ -26,7 +27,7 @@ function readStoredState(): CurrencyPriceSystemState {
       window.localStorage.getItem(STORAGE_KEY) ?? '{}',
     ) as Partial<CurrencyPriceSystemState>;
     return {
-      benchmark: { ...DEFAULT_STATE.benchmark, ...stored.benchmark },
+      benchmark: migrateCurrencyBenchmark(stored.benchmark),
       crystalPackage: { ...DEFAULT_STATE.crystalPackage, ...stored.crystalPackage },
     };
   } catch {

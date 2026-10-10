@@ -26,10 +26,31 @@ export type CurrencyBenchmarkMetrics = {
 };
 
 export const DEFAULT_CURRENCY_BENCHMARK: CurrencyBenchmarkInput = {
+  rmbAmount: 48,
+  mesoAmount: 38_570,
+  includeTransactionFee: false,
+};
+
+const PREVIOUS_DEFAULT_CURRENCY_BENCHMARK: CurrencyBenchmarkInput = {
   rmbAmount: 15,
   mesoAmount: 12_857,
   includeTransactionFee: true,
 };
+
+export function migrateCurrencyBenchmark(
+  input?: Partial<CurrencyBenchmarkInput>,
+): CurrencyBenchmarkInput {
+  if (!input) return DEFAULT_CURRENCY_BENCHMARK;
+
+  const isPreviousDefault =
+    input.rmbAmount === PREVIOUS_DEFAULT_CURRENCY_BENCHMARK.rmbAmount &&
+    input.mesoAmount === PREVIOUS_DEFAULT_CURRENCY_BENCHMARK.mesoAmount &&
+    input.includeTransactionFee === PREVIOUS_DEFAULT_CURRENCY_BENCHMARK.includeTransactionFee;
+
+  if (isPreviousDefault) return DEFAULT_CURRENCY_BENCHMARK;
+
+  return { ...DEFAULT_CURRENCY_BENCHMARK, ...input };
+}
 
 export function calculateMesoTransactionFee(amount: number) {
   if (amount < 2) return 0;
