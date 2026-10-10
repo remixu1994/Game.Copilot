@@ -1,0 +1,14 @@
+.home-tool-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.home-tool-card.cyan {
+  --accent: #64c8dc;
+  --glow: rgba(71, 185, 208, 0.18);
+}
+
+@media (max-width: 820px) {
+  .home-tool-grid {
+    grid-template-columns: 1fr;
+  }
+}

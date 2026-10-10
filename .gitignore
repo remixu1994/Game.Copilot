@@ -2,6 +2,7 @@ node_modules/
 dist/
 dist-admin/
 .vite-cache/
+.npm-cache/
 *.tsbuildinfo
 
 # Local environment files
@@ -11,6 +12,7 @@ dist-admin/
 
 # Test and tool output
 coverage/
+.playwright-cli/
 *.log
 
 # Editor and operating-system files
