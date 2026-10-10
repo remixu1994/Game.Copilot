@@ -99,7 +99,8 @@ export default function EquipmentUpgradePage() {
   const steelCount = 62;
   const [steelPackMesoPrice, setSteelPackMesoPrice] = useState(5);
   const artifactPercent = 13.7;
-  const [artifactCost, setArtifactCost] = useState(136);
+  const [weaponArtifactCost, setWeaponArtifactCost] = useState(407);
+  const [armorArtifactCost, setArmorArtifactCost] = useState(136);
   const [legendaryWeaponCost, setLegendaryWeaponCost] = useState(2269);
   const [weaponStonePrice, setWeaponStonePrice] = useState(252);
   const [weaponPowderPrice, setWeaponPowderPrice] = useState(359);
@@ -168,7 +169,14 @@ export default function EquipmentUpgradePage() {
         'purple',
         epicWeaponMesoCost,
       ),
-      createMaterial('神器武器', '神器', artifactPercent, artifactCost, '枫币', 'gold'),
+      createMaterial(
+        '神器武器',
+        '神器',
+        artifactPercent,
+        weaponArtifactCost,
+        '枫币',
+        'gold',
+      ),
       createMaterial(
         '传说武器',
         '传说',
@@ -207,7 +215,7 @@ export default function EquipmentUpgradePage() {
     return { experiencePerPercent, targetExperience, materials, weaponPowderSources };
   }, [
     armorStonePrice,
-    artifactCost,
+    weaponArtifactCost,
     artifactPercent,
     economy.rmbPerMeso,
     economy.rmbPerRedCrystal,
@@ -248,7 +256,15 @@ export default function EquipmentUpgradePage() {
     };
     const epicHatMesoCost = (epicHatLeatherCount / LEATHER_PACK_QUANTITY) * leatherPackMesoPrice;
     return [
-      createArmorMaterial('神器装备', '神器', 20143, 'gold', artifactCost, '枫币', artifactCost),
+      createArmorMaterial(
+        '神器装备',
+        '神器',
+        20143,
+        'gold',
+        armorArtifactCost,
+        '枫币',
+        armorArtifactCost,
+      ),
       createArmorMaterial(
         '史诗帽子',
         '史诗',
@@ -261,7 +277,7 @@ export default function EquipmentUpgradePage() {
       createArmorMaterial('稀有装备', '稀有', 263, 'powder', null, '—', null),
       createArmorMaterial('传说粉末', '粉末', 3000, 'powder', null, '—', null),
     ];
-  }, [artifactCost, economy.rmbPerMeso, epicHatLeatherCount, leatherPackMesoPrice]);
+  }, [armorArtifactCost, economy.rmbPerMeso, epicHatLeatherCount, leatherPackMesoPrice]);
 
   const armorPowderSource = useMemo(() => {
     const source = powderSources.find((item) => item.id === 'armor-stone')!;
@@ -447,17 +463,19 @@ export default function EquipmentUpgradePage() {
                       <dd>
                         {item.name === '神器武器' ? (
                           <>
-                            <select
+                            <input
                               aria-label="神器武器枫币成本"
-                              value={artifactCost}
-                              onChange={(event) => setArtifactCost(Number(event.target.value))}
-                            >
-                              {[136, 203, 271, 339, 475].map((price) => (
-                                <option value={price} key={price}>
-                                  {price}
-                                </option>
-                              ))}
-                            </select>
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={weaponArtifactCost}
+                              onChange={(event) => {
+                                const value = Number(event.target.value);
+                                setWeaponArtifactCost(
+                                  Number.isFinite(value) ? Math.max(0, value) : 0,
+                                );
+                              }}
+                            />
                             <span>枫币</span>
                           </>
                         ) : item.name === '传说武器' ? (
@@ -543,8 +561,8 @@ export default function EquipmentUpgradePage() {
                         <dd>
                           <select
                             aria-label="神器装备枫币售价"
-                            value={artifactCost}
-                            onChange={(event) => setArtifactCost(Number(event.target.value))}
+                            value={armorArtifactCost}
+                            onChange={(event) => setArmorArtifactCost(Number(event.target.value))}
                           >
                             {[136, 203, 271, 339, 475].map((price) => (
                               <option value={price} key={price}>
